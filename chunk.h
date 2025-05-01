@@ -7,6 +7,11 @@
 enum op_code {
 	OP_CONSTANT,
 	OP_CONSTANT_LONG,
+	OP_NEGATE,
+	OP_ADD,
+	OP_SUB,
+	OP_MUL,
+	OP_DIV,
 	OP_RETURN,
 };
 

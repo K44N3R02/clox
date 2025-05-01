@@ -62,6 +62,16 @@ int32_t disassemble_instruction(struct chunk *chunk, int32_t offset)
 	case OP_CONSTANT_LONG:
 		return long_constant_instruction("OP_CONSTANT_LONG", chunk,
 						 offset);
+	case OP_NEGATE:
+		return simple_instruction("OP_NEGATE", offset);
+	case OP_ADD:
+		return simple_instruction("OP_ADD", offset);
+	case OP_SUB:
+		return simple_instruction("OP_SUB", offset);
+	case OP_MUL:
+		return simple_instruction("OP_MUL", offset);
+	case OP_DIV:
+		return simple_instruction("OP_DIV", offset);
 	case OP_RETURN:
 		return simple_instruction("OP_RETURN", offset);
 	default:

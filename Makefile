@@ -3,7 +3,7 @@ CFLAGS = -Wall -O0 -pedantic-errors
 OPT_CFLAGS = -O2
 DEBUG_CFLAGS = -g
 TARGET = clox
-SOURCES = main.c chunk.c debug.c memory.c value.c
+SOURCES = main.c chunk.c debug.c memory.c value.c vm.c
 OBJECT_DIR = bin
 OBJECTS = $(addprefix $(OBJECT_DIR)/,$(SOURCES:.c=.o))
 

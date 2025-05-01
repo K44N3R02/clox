@@ -1,5 +1,7 @@
-#ifndef CLOX_COMMON_H
-#define CLOX_COMMON_H
+#ifndef clox_common_h
+#define clox_common_h
+
+#define DEBUG_TRACE_EXECUTION
 
 #include <stdbool.h>
 #include <stdint.h>
