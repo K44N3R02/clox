@@ -19,7 +19,7 @@ void init_value_array(struct value_array *value_array)
  */
 void write_value_array(struct value_array *value_array, value_t value)
 {
-	int old_capacity;
+	int32_t old_capacity;
 
 	if (value_array->capacity < value_array->length + 1) {
 		old_capacity = value_array->capacity;

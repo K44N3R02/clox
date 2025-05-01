@@ -6,7 +6,7 @@
 
 int main(int argc, char *argv[])
 {
-	int i;
+	int32_t i;
 	struct chunk chunk;
 
 	init_chunk(&chunk);

@@ -6,8 +6,8 @@
 typedef double value_t;
 
 struct value_array {
-	int length;
-	int capacity;
+	int32_t length;
+	int32_t capacity;
 	value_t *values;
 };
 

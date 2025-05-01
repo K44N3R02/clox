@@ -6,7 +6,7 @@
 
 void disassemble_chunk(struct chunk *chunk, char *name)
 {
-	int offset;
+	int32_t offset;
 
 	printf("== %s ==\n", name);
 
@@ -14,13 +14,14 @@ void disassemble_chunk(struct chunk *chunk, char *name)
 		offset = disassemble_instruction(chunk, offset);
 }
 
-static int simple_instruction(char *name, int offset)
+static int32_t simple_instruction(char *name, int32_t offset)
 {
 	printf("%s\n", name);
 	return offset + 1;
 }
 
-static int constant_instruction(char *name, struct chunk *chunk, int offset)
+static int32_t constant_instruction(char *name, struct chunk *chunk,
+				    int32_t offset)
 {
 	uint8_t const_addr = chunk->code[offset + 1];
 	printf("%-16s %4d '", name, const_addr);
@@ -29,23 +30,24 @@ static int constant_instruction(char *name, struct chunk *chunk, int offset)
 	return offset + 2;
 }
 
-static int long_constant_instruction(char *name, struct chunk *chunk,
-				     int offset)
+static int32_t long_constant_instruction(char *name, struct chunk *chunk,
+					 int32_t offset)
 {
 	uint8_t const_addr1 = chunk->code[offset + 1],
 		const_addr2 = chunk->code[offset + 2],
 		const_addr3 = chunk->code[offset + 3];
-	int const_addr = (const_addr1 << 16) + (const_addr2 << 8) + const_addr3;
+	int32_t const_addr =
+		(const_addr1 << 16) + (const_addr2 << 8) + const_addr3;
 	printf("%-16s %4d '", name, const_addr);
 	print_value(chunk->constants.values[const_addr]);
 	printf("'\n");
 	return offset + 4;
 }
 
-int disassemble_instruction(struct chunk *chunk, int offset)
+int32_t disassemble_instruction(struct chunk *chunk, int32_t offset)
 {
 	uint8_t instruction;
-	int line = read_line(&chunk->lines, offset);
+	int32_t line = read_line(&chunk->lines, offset);
 
 	printf("%04d ", offset);
 	if (offset > 0 && line == read_line(&chunk->lines, offset - 1))

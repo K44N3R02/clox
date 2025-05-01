@@ -16,9 +16,9 @@ void init_line_array(struct line_array *line_array)
 /**
  * NOTE: The @line_array must be properly initialized before calling this function.
  */
-void write_line_array(struct line_array *line_array, int line)
+void write_line_array(struct line_array *line_array, int32_t line)
 {
-	int len = line_array->length, old_capacity;
+	int32_t len = line_array->length, old_capacity;
 
 	if (len > 0 && line_array->lines[len - 1].line == line) {
 		line_array->lines[len - 1].run++;
@@ -37,11 +37,11 @@ void write_line_array(struct line_array *line_array, int line)
 	line_array->length++;
 }
 
-int read_line(struct line_array *line_array, int instruction)
+int32_t read_line(struct line_array *line_array, int32_t instruction)
 {
 	// Do not worry about time complexity. This function will be only
 	// called when there is an error in user's code
-	int counter, i;
+	int32_t counter, i;
 
 	for (counter = 0, i = 0; i < line_array->length; i++) {
 		counter += line_array->lines[i].run;
@@ -73,9 +73,9 @@ void init_chunk(struct chunk *chunk)
 /**
  * NOTE: The @chunk must be properly initialized before calling this function.
  */
-void write_chunk(struct chunk *chunk, uint8_t byte, int line)
+void write_chunk(struct chunk *chunk, uint8_t byte, int32_t line)
 {
-	int old_capacity;
+	int32_t old_capacity;
 
 	if (chunk->capacity < chunk->length + 1) {
 		old_capacity = chunk->capacity;
@@ -90,15 +90,15 @@ void write_chunk(struct chunk *chunk, uint8_t byte, int line)
 	write_line_array(&chunk->lines, line);
 }
 
-int add_constant(struct chunk *chunk, value_t value)
+int32_t add_constant(struct chunk *chunk, value_t value)
 {
 	write_value_array(&chunk->constants, value);
 	return chunk->constants.length - 1;
 }
 
-void write_constant(struct chunk *chunk, value_t value, int line)
+void write_constant(struct chunk *chunk, value_t value, int32_t line)
 {
-	int constant;
+	int32_t constant;
 
 	constant = add_constant(chunk, value);
 	if (constant < (1 << 8)) {
