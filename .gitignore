@@ -2,3 +2,5 @@ bin/
 *.o
 clox
 out.txt
+test.in
+test.out

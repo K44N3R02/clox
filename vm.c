@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "common.h"
+#include "compiler.h"
 #include "debug.h"
 #include "value.h"
 #include "vm.h"
@@ -89,11 +90,10 @@ static enum interpret_result run(void)
 }
 
 // TODO: Go through the chunk and resize the stack size of vm accordingly
-enum interpret_result interpret(struct chunk *chunk)
+enum interpret_result interpret(char *source)
 {
-	vm.chunk = chunk;
-	vm.ip = vm.chunk->code;
-	return run();
+	compile(source);
+	return INTERPRET_OK;
 }
 
 void push(value_t value)

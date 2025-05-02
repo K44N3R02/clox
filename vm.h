@@ -22,7 +22,7 @@ struct vm {
 
 void init_vm(void);
 void free_vm(void);
-enum interpret_result interpret(struct chunk *chunk);
+enum interpret_result interpret(char *source);
 
 void push(value_t value);
 value_t pop(void);
