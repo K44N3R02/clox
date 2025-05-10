@@ -232,6 +232,8 @@ struct token scan_token(void)
 		return make_token(TOKEN_LEFT_BRACE);
 	case '}':
 		return make_token(TOKEN_RIGHT_BRACE);
+	case ':':
+		return make_token(TOKEN_COLON);
 	case ',':
 		return make_token(TOKEN_COMMA);
 	case '.':
@@ -240,6 +242,8 @@ struct token scan_token(void)
 		return make_token(TOKEN_MINUS);
 	case '+':
 		return make_token(TOKEN_PLUS);
+	case '?':
+		return make_token(TOKEN_QUESTION);
 	case ';':
 		return make_token(TOKEN_SEMICOLON);
 	case '/':
