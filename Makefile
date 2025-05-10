@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -Wall -O0 -pedantic-errors
+CFLAGS = -Wall -pedantic-errors -O0 -std=c99 -pedantic
 OPT_CFLAGS = -O2
 DEBUG_CFLAGS = -g
 TARGET = clox
