@@ -1,6 +1,10 @@
 #ifndef clox_compiler_h
 #define clox_compiler_h
 
-void compile(char *source);
+#include "common.h"
+#include "chunk.h"
+#include "vm.h"
+
+bool compile(char *source, struct chunk *chunk);
 
 #endif
