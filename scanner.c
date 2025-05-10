@@ -244,6 +244,8 @@ struct token scan_token(void)
 		return make_token(TOKEN_SEMICOLON);
 	case '/':
 		return make_token(TOKEN_SLASH);
+	case '*':
+		return make_token(TOKEN_STAR);
 	case '!':
 		return make_token(match('=') ? TOKEN_BANG_EQUAL : TOKEN_BANG);
 	case '=':
