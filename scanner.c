@@ -79,6 +79,13 @@ static void skip_whitespace(void)
 
 	for (;;)
 		switch (c = peek()) {
+		case '/':
+			if (peek_next() == '/')
+				while (peek() != '\n' && !is_at_end())
+					advance();
+			/* fall through */
+			else
+				return;
 		case '\n':
 			scanner.line++;
 			/* fall through */
@@ -87,11 +94,6 @@ static void skip_whitespace(void)
 		case '\t':
 			advance();
 			break;
-		case '/':
-			if (peek_next() == '/')
-				while (peek() != '\n' && !is_at_end())
-					advance();
-			/* fall through */
 		default:
 			return;
 		}
