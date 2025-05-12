@@ -40,6 +40,7 @@ static void disassemble_constant_table(struct chunk *chunk)
 {
 	int32_t i;
 
+	printf("constants:\n");
 	for (i = 0; i < chunk->constants.length; i++) {
 		printf("%04d : ", i);
 		print_type(chunk->constants.values[i]);
@@ -54,7 +55,6 @@ void disassemble_chunk(struct chunk *chunk, char *name)
 	int32_t offset;
 
 	printf("== %s ==\n", name);
-	printf("constant table:\n");
 	disassemble_constant_table(chunk);
 
 	printf("op_code:\n");
