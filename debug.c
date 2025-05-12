@@ -3,14 +3,61 @@
 
 #include "common.h"
 #include "debug.h"
+#include "object.h"
 #include "value.h"
+
+static void print_type(value_t value)
+{
+	switch (value.value_type) {
+	case VALUE_NUMBER:
+		printf("number");
+		break;
+	case VALUE_BOOLEAN:
+		printf("boolean");
+		break;
+	case VALUE_NIL:
+		printf("nil");
+		break;
+	case VALUE_OBJECT:
+		printf("object");
+		switch (AS_OBJECT(value)->object_type) {
+		case OBJECT_STRING:
+			printf(">string");
+			break;
+		default:
+			fprintf(stderr,
+				"Unknown object type given to print_type.");
+			break;
+		}
+		break;
+	default:
+		fprintf(stderr, "Unknown value type given to print_type.");
+		break;
+	}
+}
+
+static void disassemble_constant_table(struct chunk *chunk)
+{
+	int32_t i;
+
+	for (i = 0; i < chunk->constants.length; i++) {
+		printf("%04d : ", i);
+		print_type(chunk->constants.values[i]);
+		printf(" '");
+		print_value(chunk->constants.values[i]);
+		printf("'\n");
+	}
+}
 
 void disassemble_chunk(struct chunk *chunk, char *name)
 {
 	int32_t offset;
 
 	printf("== %s ==\n", name);
+	printf("constant table:\n");
+	disassemble_constant_table(chunk);
 
+	printf("op_code:\n");
 	for (offset = 0; offset < chunk->length;)
 		offset = disassemble_instruction(chunk, offset);
 }
