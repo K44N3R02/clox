@@ -41,5 +41,15 @@ void free_value_array(struct value_array *value_array)
 
 void print_value(value_t value)
 {
-	printf("%g", value);
+	switch (value.value_type) {
+	case VALUE_NUMBER:
+		printf("%g", AS_NUMBER(value));
+		break;
+	case VALUE_BOOLEAN:
+		printf(AS_BOOLEAN(value) ? "true" : "false");
+		break;
+	case VALUE_NIL:
+		printf("nil");
+		break;
+	}
 }

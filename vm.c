@@ -1,8 +1,9 @@
-#include "chunk.h"
+#include <stdarg.h>
 #include <stdio.h>
 
 #include "common.h"
 #include "compiler.h"
+#include "chunk.h"
 #include "debug.h"
 #include "value.h"
 #include "vm.h"
@@ -23,15 +24,62 @@ void free_vm(void)
 {
 }
 
+static value_t peek(int32_t distance)
+{
+	return vm.stack_top[-1 - distance];
+}
+
+static void runtime_error(const char *format, ...)
+{
+	int32_t instruction;
+	va_list args;
+
+	va_start(args, format);
+	vfprintf(stderr, format, args);
+	va_end(args);
+	fprintf(stderr, "\n");
+
+	instruction = vm.ip - vm.chunk->code - 1;
+	fprintf(stderr, "[line: %d] in script\n",
+		read_line(&vm.chunk->lines, instruction));
+	reset_stack();
+}
+
+static bool is_false(value_t value)
+{
+	return IS_NIL(value) || (IS_BOOLEAN(value) && !AS_BOOLEAN(value));
+}
+
+static bool is_equal(value_t a, value_t b)
+{
+	if (a.value_type != b.value_type)
+		return false;
+
+	switch (a.value_type) {
+	case VALUE_NUMBER:
+		return AS_NUMBER(a) == AS_NUMBER(b);
+	case VALUE_BOOLEAN:
+		return AS_BOOLEAN(a) == AS_BOOLEAN(b);
+	case VALUE_NIL:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static enum interpret_result run(void)
 {
 #define READ_BYTE() (*vm.ip++)
 #define FETCH_CONST(address) (vm.chunk->constants.values[(address)])
-#define BINARY_OP(op)         \
-	do {                  \
-		b = pop();    \
-		a = pop();    \
-		push(a op b); \
+#define BINARY_OP(result_type, op)                                            \
+	do {                                                                  \
+		if (!(IS_NUMBER(peek(0)) && IS_NUMBER(peek(1)))) {            \
+			runtime_error("Binary %s requires two numbers", #op); \
+			return INTERPRET_RUNTIME_ERROR;                       \
+		}                                                             \
+		b = pop();                                                    \
+		a = pop();                                                    \
+		push(result_type(AS_NUMBER(a) op AS_NUMBER(b)));              \
 	} while (0)
 
 	uint8_t instruction;
@@ -65,20 +113,49 @@ static enum interpret_result run(void)
 			constant = FETCH_CONST(address);
 			push(constant);
 			break;
+		case OP_NIL:
+			push(CONS_NIL);
+			break;
+		case OP_TRUE:
+			push(CONS_BOOLEAN(true));
+			break;
+		case OP_FALSE:
+			push(CONS_BOOLEAN(false));
+			break;
+		case OP_NOT:
+			push(CONS_BOOLEAN(is_false(pop())));
+			break;
 		case OP_NEGATE:
-			vm.stack_top[-1] *= -1;
+			if (!IS_NUMBER(peek(0))) {
+				runtime_error(
+					"Unary negation requires a number.");
+				return INTERPRET_RUNTIME_ERROR;
+			}
+
+			AS_NUMBER(vm.stack_top[-1]) *= -1;
 			break;
 		case OP_ADD:
-			BINARY_OP(+);
+			BINARY_OP(CONS_NUMBER, +);
 			break;
 		case OP_SUB:
-			BINARY_OP(-);
+			BINARY_OP(CONS_NUMBER, -);
 			break;
 		case OP_MUL:
-			BINARY_OP(*);
+			BINARY_OP(CONS_NUMBER, *);
 			break;
 		case OP_DIV:
-			BINARY_OP(/);
+			BINARY_OP(CONS_NUMBER, /);
+			break;
+		case OP_EQUAL:
+			b = pop();
+			a = pop();
+			push(CONS_BOOLEAN(is_equal(a, b)));
+			break;
+		case OP_LESS:
+			BINARY_OP(CONS_BOOLEAN, <);
+			break;
+		case OP_GREATER:
+			BINARY_OP(CONS_BOOLEAN, >);
 			break;
 		case OP_RETURN:
 			print_value(pop());
@@ -88,6 +165,7 @@ static enum interpret_result run(void)
 	}
 #undef READ_BYTE
 #undef FETCH_CONST
+#undef BINARY_OP
 }
 
 // TODO: Go through the chunk and resize the stack size of vm accordingly
