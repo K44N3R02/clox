@@ -1,10 +1,13 @@
+#include "memory.h"
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "common.h"
 #include "compiler.h"
 #include "chunk.h"
 #include "debug.h"
+#include "object.h"
 #include "value.h"
 #include "vm.h"
 
@@ -18,10 +21,12 @@ static void reset_stack(void)
 void init_vm(void)
 {
 	reset_stack();
+	vm.objects = NULL;
 }
 
 void free_vm(void)
 {
+	free_objects();
 }
 
 static value_t peek(int32_t distance)
@@ -62,9 +67,37 @@ static bool is_equal(value_t a, value_t b)
 		return AS_BOOLEAN(a) == AS_BOOLEAN(b);
 	case VALUE_NIL:
 		return true;
+	case VALUE_OBJECT: {
+		struct object_string *a_str = AS_OBJ_STRING(a);
+		struct object_string *b_str = AS_OBJ_STRING(b);
+		return a_str->length == b_str->length &&
+		       memcmp(a_str->characters, b_str->characters,
+			      a_str->length) == 0;
+	}
 	default:
 		return false;
 	}
+}
+
+static void concatenate(void)
+{
+	struct object_string *a, *b, *result;
+	int32_t length;
+	char *buffer;
+
+	b = AS_OBJ_STRING(pop());
+	a = AS_OBJ_STRING(pop());
+	length = a->length + b->length;
+	buffer = ALLOCATE(char, length + 1);
+	memcpy(buffer, a->characters, a->length);
+	memcpy(buffer + a->length, b->characters, b->length);
+	buffer[length] = '\0';
+
+	result = take_string(buffer, length);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+	push(CONS_OBJECT(result));
+#pragma clang diagnostic pop
 }
 
 static enum interpret_result run(void)
@@ -135,7 +168,17 @@ static enum interpret_result run(void)
 			AS_NUMBER(vm.stack_top[-1]) *= -1;
 			break;
 		case OP_ADD:
-			BINARY_OP(CONS_NUMBER, +);
+			if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
+				b = pop();
+				a = pop();
+				push(CONS_NUMBER(AS_NUMBER(a) + AS_NUMBER(b)));
+			} else if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
+				concatenate();
+			} else {
+				runtime_error(
+					"Binary + requires two numbers or two strings");
+				return INTERPRET_RUNTIME_ERROR;
+			}
 			break;
 		case OP_SUB:
 			BINARY_OP(CONS_NUMBER, -);

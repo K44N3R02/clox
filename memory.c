@@ -1,5 +1,7 @@
 #include "common.h"
+#include "object.h"
 #include "memory.h"
+#include "vm.h"
 
 /**
  * reallocate() - Resizes a memory block.
@@ -37,4 +39,31 @@ void *reallocate(void *ptr, size_t old_size, size_t new_size)
 		exit(1);
 
 	return result;
+}
+
+static void free_object(struct object *object)
+{
+	switch (object->object_type) {
+	case OBJECT_STRING: {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+		struct object_string *str = object;
+#pragma clang diagnostic pop
+		FREE_ARRAY(char, str->characters, str->length + 1);
+		FREE(struct object_string, object);
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+void free_objects(void)
+{
+	struct object *object = vm.objects;
+	while (object != NULL) {
+		vm.objects = object->next;
+		free_object(object);
+		object = vm.objects;
+	}
 }

@@ -18,7 +18,10 @@ struct vm {
 	uint8_t *ip;
 	value_t stack[STACK_MAX];
 	value_t *stack_top;
+	struct object *objects;
 };
+
+extern struct vm vm;
 
 void init_vm(void);
 void free_vm(void);

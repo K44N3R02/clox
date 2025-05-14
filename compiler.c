@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #include "compiler.h"
+#include "object.h"
 #include "scanner.h"
 #include "value.h"
 #ifdef DEBUG_DUMP_CODE
@@ -162,6 +163,17 @@ static void number(void)
 	emit_constant(CONS_NUMBER(value));
 }
 
+static void string(void)
+{
+	struct object_string *str = copy_string(parser.previous.start + 1,
+						parser.previous.length - 2);
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+	emit_constant(CONS_OBJECT(str));
+#pragma clang diagnostic pop
+}
+
 static void grouping(void)
 {
 	expression();
@@ -295,7 +307,7 @@ struct parse_rule rules[] = {
 	[TOKEN_LESS]		= { NULL,	binary,		PREC_COMPARISON },
 	[TOKEN_LESS_EQUAL]	= { NULL,	binary,		PREC_COMPARISON },
 	[TOKEN_IDENTIFIER]	= { NULL,	NULL,		PREC_NONE },
-	[TOKEN_STRING]		= { NULL,	NULL,		PREC_NONE },
+	[TOKEN_STRING]		= { string,	NULL,		PREC_NONE },
 	[TOKEN_NUMBER]		= { number,	NULL,		PREC_NONE },
 	[TOKEN_AND]		= { NULL,	NULL,		PREC_NONE },
 	[TOKEN_CLASS]		= { NULL,	NULL,		PREC_NONE },

@@ -3,7 +3,7 @@ CFLAGS = -Wall -pedantic-errors -O0 -std=c99 -pedantic
 OPT_CFLAGS = -O2
 DEBUG_CFLAGS = -g
 TARGET = clox
-SOURCES = main.c chunk.c compiler.c debug.c memory.c scanner.c value.c vm.c
+SOURCES = main.c chunk.c compiler.c debug.c object.c memory.c scanner.c value.c vm.c
 OBJECT_DIR = bin
 OBJECTS = $(addprefix $(OBJECT_DIR)/,$(SOURCES:.c=.o))
 
@@ -29,5 +29,8 @@ release: all # Build the 'all' target, but with modified CFLAGS
 clean:
 	rm -f $(OBJECTS) $(TARGET)
 
-.PHONY: all debug release clean # Declare these as phony targets
+run: all
+	./clox test.in > test.out
+
+.PHONY: all debug release clean run # Declare these as phony targets
 
