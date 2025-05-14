@@ -30,7 +30,7 @@ clean:
 	rm -f $(OBJECTS) $(TARGET)
 
 run: all
-	./clox test.in > test.out
+	./$(TARGET) test.in > test.out
 
 .PHONY: all debug release clean run # Declare these as phony targets
 
