@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -34,25 +35,25 @@ struct object *allocate_object(size_t size, enum object_type obj_type)
 	return obj;
 }
 
-static struct object_string *allocate_string(char *str, int32_t length)
+struct object_string *allocate_string(int32_t length)
 {
-	struct object_string *result =
-		ALLOCATE_OBJ(struct object_string, OBJECT_STRING);
+	struct object_string *result;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+	result = allocate_object(offsetof(struct object_string, characters) +
+					 (length + 1) *
+						 sizeof(result->characters[0]),
+				 OBJECT_STRING);
+#pragma clang diagnostic pop
 	result->length = length;
-	result->characters = str;
 
 	return result;
 }
 
 struct object_string *copy_string(const char *str, int32_t length)
 {
-	char *copy = ALLOCATE(char, length + 1);
-	memcpy(copy, str, length);
-	copy[length] = '\0';
-	return allocate_string(copy, length);
-}
-
-struct object_string *take_string(char *str, int32_t length)
-{
-	return allocate_string(str, length);
+	struct object_string *result = allocate_string(length);
+	memcpy(result->characters, str, length);
+	result->characters[length] = '\0';
+	return result;
 }

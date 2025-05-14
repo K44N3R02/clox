@@ -83,17 +83,14 @@ static void concatenate(void)
 {
 	struct object_string *a, *b, *result;
 	int32_t length;
-	char *buffer;
 
 	b = AS_OBJ_STRING(pop());
 	a = AS_OBJ_STRING(pop());
 	length = a->length + b->length;
-	buffer = ALLOCATE(char, length + 1);
-	memcpy(buffer, a->characters, a->length);
-	memcpy(buffer + a->length, b->characters, b->length);
-	buffer[length] = '\0';
-
-	result = take_string(buffer, length);
+	result = allocate_string(length);
+	memcpy(result->characters, a->characters, a->length);
+	memcpy(result->characters + a->length, b->characters, b->length);
+	result->characters[length] = '\0';
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wincompatible-pointer-types"
 	push(CONS_OBJECT(result));

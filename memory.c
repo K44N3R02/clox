@@ -45,11 +45,6 @@ static void free_object(struct object *object)
 {
 	switch (object->object_type) {
 	case OBJECT_STRING: {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
-		struct object_string *str = object;
-#pragma clang diagnostic pop
-		FREE_ARRAY(char, str->characters, str->length + 1);
 		FREE(struct object_string, object);
 		break;
 	}

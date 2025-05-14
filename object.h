@@ -19,7 +19,7 @@ struct object {
 struct object_string {
 	struct object object;
 	int32_t length;
-	char *characters;
+	char characters[];
 };
 
 #define IS_STRING(value) (is_object_type(value, OBJECT_STRING))
@@ -30,7 +30,7 @@ bool is_object_type(value_t value, enum object_type object_type);
 void print_object(value_t value);
 
 struct object *allocate_object(size_t size, enum object_type obj_type);
+struct object_string *allocate_string(int32_t length);
 struct object_string *copy_string(const char *str, int32_t length);
-struct object_string *take_string(char *str, int32_t length);
 
 #endif
