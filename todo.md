@@ -26,6 +26,11 @@
 - [ ] Different handling for owned strings and constant strings from source code
 - [ ] Handling of addition with strings (my idea: probably user means the string version of other type, so use use a hidden .to_str() function)
 
+## Chapter 20
+- [ ] Add support for all value types (number, boolean, nil) to be keys of a hash table
+- [ ] Add support for user defined class instances to be keys of a hash table
+- [ ] Add benchmark for hash tables and try some alternative hash tables
+
 # Design Notes
 ## Chapter 14
 - [ ] Preparing tests for language

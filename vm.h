@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "chunk.h"
+#include "table.h"
 #include "value.h"
 
 #define STACK_MAX 256
@@ -18,6 +19,7 @@ struct vm {
 	uint8_t *ip;
 	value_t stack[STACK_MAX];
 	value_t *stack_top;
+	struct table strings;
 	struct object *objects;
 };
 

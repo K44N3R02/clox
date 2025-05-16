@@ -8,6 +8,7 @@
 #include "chunk.h"
 #include "debug.h"
 #include "object.h"
+#include "table.h"
 #include "value.h"
 #include "vm.h"
 
@@ -22,11 +23,13 @@ void init_vm(void)
 {
 	reset_stack();
 	vm.objects = NULL;
+	init_table(&vm.strings);
 }
 
 void free_vm(void)
 {
 	free_objects();
+	free_table(&vm.strings);
 }
 
 static value_t peek(int32_t distance)
@@ -67,13 +70,8 @@ static bool is_equal(value_t a, value_t b)
 		return AS_BOOLEAN(a) == AS_BOOLEAN(b);
 	case VALUE_NIL:
 		return true;
-	case VALUE_OBJECT: {
-		struct object_string *a_str = AS_OBJ_STRING(a);
-		struct object_string *b_str = AS_OBJ_STRING(b);
-		return a_str->length == b_str->length &&
-		       memcmp(a_str->characters, b_str->characters,
-			      a_str->length) == 0;
-	}
+	case VALUE_OBJECT:
+		return AS_OBJECT(a) == AS_OBJECT(b);
 	default:
 		return false;
 	}

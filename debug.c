@@ -36,6 +36,43 @@ static void print_type(value_t value)
 	}
 }
 
+static void repr_value(value_t value)
+{
+	printf("'");
+	print_value(value);
+	printf("'");
+	switch (value.value_type) {
+	case VALUE_NUMBER:
+		break;
+	case VALUE_BOOLEAN:
+		break;
+	case VALUE_NIL:
+		break;
+	case VALUE_OBJECT:
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-pedantic"
+		printf(" obj:%p next:%p", AS_OBJECT(value),
+		       AS_OBJECT(value)->next);
+		switch (AS_OBJECT(value)->object_type) {
+		case OBJECT_STRING:
+			printf(" len:%4d chr-ptr:%p hash:%08x",
+			       AS_OBJ_STRING(value)->length,
+			       AS_OBJ_STRING(value)->characters,
+			       AS_OBJ_STRING(value)->hash);
+			break;
+		default:
+			fprintf(stderr,
+				"Unknown object type given to repr_value.");
+			break;
+		}
+		break;
+#pragma clang diagnostic pop
+	default:
+		fprintf(stderr, "Unknown value type given to repr_value.");
+		break;
+	}
+}
+
 static void disassemble_constant_table(struct chunk *chunk)
 {
 	int32_t i;
@@ -44,9 +81,15 @@ static void disassemble_constant_table(struct chunk *chunk)
 	for (i = 0; i < chunk->constants.length; i++) {
 		printf("%04d : ", i);
 		print_type(chunk->constants.values[i]);
-		printf(" '");
+		printf(" ");
+#ifdef DEBUG_CONST_TABLE_EXTRA
+		repr_value(chunk->constants.values[i]);
+#else
+		printf("'");
 		print_value(chunk->constants.values[i]);
-		printf("'\n");
+		printf("'");
+#endif
+		printf("\n");
 	}
 }
 
