@@ -20,6 +20,7 @@ struct vm {
 	value_t stack[STACK_MAX];
 	value_t *stack_top;
 	struct table strings;
+	struct table globals;
 	struct object *objects;
 };
 

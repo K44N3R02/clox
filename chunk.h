@@ -19,6 +19,14 @@ enum op_code {
 	OP_EQUAL,
 	OP_LESS,
 	OP_GREATER,
+	OP_PRINT,
+	OP_POP,
+	OP_DEFINE_GLOBAL,
+	OP_DEFINE_GLOBAL_LONG,
+	OP_GET_GLOBAL,
+	OP_GET_GLOBAL_LONG,
+	OP_SET_GLOBAL,
+	OP_SET_GLOBAL_LONG,
 	OP_RETURN,
 };
 
@@ -48,6 +56,7 @@ struct chunk {
 
 void init_chunk(struct chunk *chunk);
 void write_chunk(struct chunk *chunk, uint8_t byte, int32_t line);
+int32_t add_constant(struct chunk *chunk, value_t value);
 void write_constant(struct chunk *chunk, value_t value, int32_t line);
 void free_chunk(struct chunk *chunk);
 

@@ -23,6 +23,7 @@ void init_vm(void)
 {
 	reset_stack();
 	vm.objects = NULL;
+	init_table(&vm.globals);
 	init_table(&vm.strings);
 }
 
@@ -101,7 +102,9 @@ static void concatenate(void)
 static enum interpret_result run(void)
 {
 #define READ_BYTE() (*vm.ip++)
+#define READ_LONG_ARG() ((READ_BYTE() << 16) + (READ_BYTE() << 8) + READ_BYTE())
 #define FETCH_CONST(address) (vm.chunk->constants.values[(address)])
+#define READ_STRING(address) (AS_OBJ_STRING(FETCH_CONST((address))))
 #define BINARY_OP(result_type, op)                                            \
 	do {                                                                  \
 		if (!(IS_NUMBER(peek(0)) && IS_NUMBER(peek(1)))) {            \
@@ -116,6 +119,7 @@ static enum interpret_result run(void)
 	uint8_t instruction;
 	int32_t address;
 	value_t constant, a, b;
+	struct object_string *name;
 #ifdef DEBUG_TRACE_EXECUTION
 	value_t *slot;
 #endif
@@ -139,8 +143,7 @@ static enum interpret_result run(void)
 			push(constant);
 			break;
 		case OP_CONSTANT_LONG:
-			address = (READ_BYTE() << 16) + (READ_BYTE() << 8) +
-				  READ_BYTE();
+			address = READ_LONG_ARG();
 			constant = FETCH_CONST(address);
 			push(constant);
 			break;
@@ -198,14 +201,63 @@ static enum interpret_result run(void)
 		case OP_GREATER:
 			BINARY_OP(CONS_BOOLEAN, >);
 			break;
-		case OP_RETURN:
+		case OP_PRINT:
 			print_value(pop());
 			printf("\n");
+			break;
+		case OP_POP:
+			pop();
+			break;
+		case OP_DEFINE_GLOBAL:
+			name = READ_STRING(READ_BYTE());
+			table_set(&vm.globals, name, peek(0));
+			// Garbage collection may trigger, pop after writing
+			// to table is completed
+			pop();
+			break;
+		case OP_DEFINE_GLOBAL_LONG:
+			name = READ_STRING(READ_LONG_ARG());
+			table_set(&vm.globals, name, peek(0));
+			// Garbage collection may trigger, pop after writing
+			// to table is completed
+			pop();
+			break;
+		case OP_GET_GLOBAL:
+			name = READ_STRING(READ_BYTE());
+			if (!table_get(&vm.globals, name, &a)) {
+				runtime_error("Undefined variable '%s'.",
+					      name->characters);
+				return INTERPRET_RUNTIME_ERROR;
+			}
+			push(a);
+			break;
+		case OP_GET_GLOBAL_LONG:
+			name = READ_STRING(READ_LONG_ARG());
+			if (!table_get(&vm.globals, name, &a)) {
+				runtime_error("Undefined variable '%s'.",
+					      name->characters);
+				return INTERPRET_RUNTIME_ERROR;
+			}
+			push(a);
+			break;
+		case OP_SET_GLOBAL:
+			name = READ_STRING(READ_BYTE());
+			// This disables implicit variable declaration
+			if (table_set(&vm.globals, name, peek(0))) {
+				table_delete(&vm.globals, name);
+				runtime_error("Undefined variable '%s'.",
+					      name->characters);
+				return INTERPRET_RUNTIME_ERROR;
+			}
+			break;
+		case OP_RETURN:
 			return INTERPRET_OK;
 		}
 	}
 #undef READ_BYTE
+#undef READ_LONG_ARG
 #undef FETCH_CONST
+#undef READ_STRING
 #undef BINARY_OP
 }
 

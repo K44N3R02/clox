@@ -31,6 +31,20 @@
 - [ ] Add support for user defined class instances to be keys of a hash table
 - [ ] Add benchmark for hash tables and try some alternative hash tables
 
+## Chapter 21
+- [ ] Optimize identifiers usage of constant table. Every time an identifier is encountered, the name is added to constant table even if it already exist.
+        My idea: in table strings, give identifiers an id and get them by id
+- [ ] Hash table lookup is slow, come up with a faster solution
+        My idea: using the id, create an array and store the values (or pointers) and access from there
+- [ ] How can we report the issue in the following code? Function is never executed, so no runtime error will occur.
+        ```
+        fun useVar() {
+          print oops;
+        }
+
+        var ooops = "too many o's!";
+        ```
+
 # Design Notes
 ## Chapter 14
 - [ ] Preparing tests for language
@@ -42,3 +56,7 @@
 ## Chapter 18
 - [ ] Exception handling
 - [ ] Full stack trace when runtime error occurs
+
+# My Todos
+- [ ] Go through the chunk and resize the stack size of vm accordingly
+- [ ] Support `var x = 1, y, z="asd";`

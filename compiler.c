@@ -1,10 +1,12 @@
 #include "chunk.h"
+#include <stdint.h>
 #include <stdio.h>
 
 #include "compiler.h"
 #include "object.h"
 #include "scanner.h"
 #include "value.h"
+#include <stdlib.h>
 #ifdef DEBUG_DUMP_CODE
 #include "debug.h"
 #endif
@@ -34,7 +36,7 @@ enum precedence {
 };
 // clang-format on
 
-typedef void (*parse_fn_t)(void);
+typedef void (*parse_fn_t)(bool can_assign);
 
 struct parse_rule {
 	parse_fn_t prefix;
@@ -93,6 +95,42 @@ static void consume(enum token_type token_type, const char *message)
 	advance();
 }
 
+static bool check(enum token_type token_type)
+{
+	return parser.current.token_type == token_type;
+}
+
+static bool match(enum token_type token_type)
+{
+	if (!check(token_type))
+		return false;
+	advance();
+	return true;
+}
+
+static void synchronize(void)
+{
+	parser.panic_mode = false;
+
+	while (parser.current.token_type != TOKEN_EOF) {
+		if (parser.previous.token_type == TOKEN_SEMICOLON)
+			return;
+		switch (parser.current.token_type) {
+		case TOKEN_CLASS: /* fall through */
+		case TOKEN_FUN: /* fall through */
+		case TOKEN_VAR: /* fall through */
+		case TOKEN_FOR: /* fall through */
+		case TOKEN_IF: /* fall through */
+		case TOKEN_WHILE: /* fall through */
+		case TOKEN_PRINT: /* fall through */
+		case TOKEN_RETURN: /* fall through */
+			return;
+		default:
+			advance();
+		}
+	}
+}
+
 // byte emit helpers
 struct chunk *compiling_chunk;
 
@@ -133,10 +171,12 @@ static void end_compiler(void)
 
 // clox grammar
 static void expression(void);
+static void statement(void);
+static void declaration(void);
 static struct parse_rule *get_rule(enum token_type token_type);
 static void parse_precedence(enum precedence precedence);
 
-static void literal(void)
+static void literal(bool can_assign)
 {
 	enum token_type literal = parser.previous.token_type;
 
@@ -156,14 +196,14 @@ static void literal(void)
 	}
 }
 
-static void number(void)
+static void number(bool can_assign)
 {
 	double value = strtod(parser.previous.start, NULL);
 
 	emit_constant(CONS_NUMBER(value));
 }
 
-static void string(void)
+static void string(bool can_assign)
 {
 	struct object_string *str = copy_string(parser.previous.start + 1,
 						parser.previous.length - 2);
@@ -174,13 +214,57 @@ static void string(void)
 #pragma clang diagnostic pop
 }
 
-static void grouping(void)
+static uint32_t identifier_constant(struct token *token)
+{
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+	return add_constant(
+		current_chunk(),
+		CONS_OBJECT(copy_string(token->start, token->length)));
+#pragma clang diagnostic pop
+}
+
+static void named_variable(struct token token, bool can_assign)
+{
+	// This fills the constant table with identical strings even for set
+	// expressions. They point to same string but some of these entries are
+	// still unnecessary.
+	int32_t arg = identifier_constant(&token);
+
+	if (arg < 1 << 8) {
+		if (can_assign && match(TOKEN_EQUAL)) {
+			expression();
+			emit_bytes(OP_SET_GLOBAL, arg);
+		} else {
+			emit_bytes(OP_GET_GLOBAL, arg);
+		}
+	} else if (arg < 1 << 24) {
+		if (match(TOKEN_EQUAL)) {
+			expression();
+			emit_bytes(OP_SET_GLOBAL_LONG, (uint8_t)(arg >> 16));
+			emit_bytes((uint8_t)(arg >> 8), (uint8_t)arg);
+		} else {
+			emit_bytes(OP_GET_GLOBAL_LONG, (uint8_t)(arg >> 16));
+			emit_bytes((uint8_t)(arg >> 8), (uint8_t)arg);
+		}
+	} else {
+		fprintf(stderr, "Too many arg variables.");
+		exit(1);
+	}
+}
+
+static void variable(bool can_assign)
+{
+	named_variable(parser.previous, can_assign);
+}
+
+static void grouping(bool can_assign)
 {
 	expression();
 	consume(TOKEN_RIGHT_PAREN, "Expected ')' after expression.");
 }
 
-static void unary(void)
+static void unary(bool can_assign)
 {
 	enum token_type operator = parser.previous.token_type;
 
@@ -199,7 +283,7 @@ static void unary(void)
 	}
 }
 
-static void binary(void)
+static void binary(bool can_assign)
 {
 	enum token_type operator = parser.previous.token_type;
 	struct parse_rule *rule = get_rule(operator);
@@ -245,7 +329,7 @@ static void binary(void)
 
 // WARNING: Incomplete functionality: Only for chapter 17 challenge
 // Will be implemented properly when jump instructions are added.
-static void ternary(void)
+static void ternary(bool can_assign)
 {
 	printf("ternary\n");
 	parse_precedence(PREC_ASSIGNMENT);
@@ -268,19 +352,91 @@ static void parse_precedence(enum precedence precedence)
 	}
 
 	// Run prefix rule
-	rule_fn();
+	bool can_assign = precedence <= PREC_ASSIGNMENT;
+	rule_fn(can_assign);
 
 	while (precedence <= get_rule(parser.current.token_type)->precedence) {
 		advance();
 		rule_fn = get_rule(parser.previous.token_type)->infix;
 		// Run infix rule
-		rule_fn();
+		rule_fn(can_assign);
 	}
+
+	if (can_assign && match(TOKEN_EQUAL))
+		error("Invalid assignment target.");
+}
+
+static void print_statement(void)
+{
+	expression();
+	consume(TOKEN_SEMICOLON, "Expected semicolon after print statement.");
+	emit_byte(OP_PRINT);
+}
+
+static void expression_statement(void)
+{
+	expression();
+	consume(TOKEN_SEMICOLON,
+		"Expected semicolon after expression statement.");
+	emit_byte(OP_POP);
 }
 
 static void expression(void)
 {
 	parse_precedence(PREC_ASSIGNMENT);
+}
+
+static void statement(void)
+{
+	if (match(TOKEN_PRINT))
+		print_statement();
+	else
+		expression_statement();
+}
+
+static uint32_t parse_variable(const char *msg)
+{
+	consume(TOKEN_IDENTIFIER, msg);
+	return identifier_constant(&parser.previous);
+}
+
+static void define_variable(uint32_t global)
+{
+	if (global < 1 << 8) {
+		emit_bytes(OP_DEFINE_GLOBAL, global);
+	} else if (global < 1 << 24) {
+		emit_bytes(OP_DEFINE_GLOBAL_LONG, (uint8_t)(global >> 16));
+		emit_bytes((uint8_t)(global >> 8), (uint8_t)global);
+	} else {
+		fprintf(stderr, "Too many global variables.");
+		exit(1);
+	}
+}
+
+static void variable_declaration(void)
+{
+	uint32_t global =
+		parse_variable("Expected variable name after keyword var.");
+
+	if (match(TOKEN_EQUAL))
+		expression();
+	else
+		emit_byte(OP_NIL);
+
+	consume(TOKEN_SEMICOLON, "Expected ; after variable declaration.");
+
+	define_variable(global);
+}
+
+static void declaration(void)
+{
+	if (match(TOKEN_VAR))
+		variable_declaration();
+	else
+		statement();
+
+	if (parser.panic_mode)
+		synchronize();
 }
 
 // clang-format off
@@ -306,7 +462,7 @@ struct parse_rule rules[] = {
 	[TOKEN_GREATER_EQUAL]	= { NULL,	binary,		PREC_COMPARISON },
 	[TOKEN_LESS]		= { NULL,	binary,		PREC_COMPARISON },
 	[TOKEN_LESS_EQUAL]	= { NULL,	binary,		PREC_COMPARISON },
-	[TOKEN_IDENTIFIER]	= { NULL,	NULL,		PREC_NONE },
+	[TOKEN_IDENTIFIER]	= { variable,	NULL,		PREC_NONE },
 	[TOKEN_STRING]		= { string,	NULL,		PREC_NONE },
 	[TOKEN_NUMBER]		= { number,	NULL,		PREC_NONE },
 	[TOKEN_AND]		= { NULL,	NULL,		PREC_NONE },
@@ -345,8 +501,11 @@ bool compile(char *source, struct chunk *chunk)
 	parser.panic_mode = false;
 
 	advance();
-	expression();
-	consume(TOKEN_EOF, "Expected end of expression.");
+
+	while (!match(TOKEN_EOF)) {
+		declaration();
+	}
+
 	end_compiler();
 
 	return !parser.had_error;
