@@ -1,4 +1,5 @@
 #include "chunk.h"
+#include <stdint.h>
 #include <stdio.h>
 
 #include "common.h"
@@ -111,6 +112,13 @@ static int32_t simple_instruction(char *name, int32_t offset)
 	return offset + 1;
 }
 
+static int32_t numbered_instruction(char *name, struct chunk *chunk,
+				    int32_t offset)
+{
+	printf("%-16s %4d\n", name, chunk->code[offset + 1]);
+	return offset + 2;
+}
+
 static int32_t constant_instruction(char *name, struct chunk *chunk,
 				    int32_t offset)
 {
@@ -133,6 +141,13 @@ static int32_t long_constant_instruction(char *name, struct chunk *chunk,
 	print_value(chunk->constants.values[const_addr]);
 	printf("'\n");
 	return offset + 4;
+}
+
+static int32_t byte_instruction(char *name, struct chunk *chunk, int32_t offset)
+{
+	uint8_t slot = chunk->code[offset + 1];
+	printf("%-16s %4d\n", name, slot);
+	return offset + 2;
 }
 
 int32_t disassemble_instruction(struct chunk *chunk, int32_t offset)
@@ -181,6 +196,8 @@ int32_t disassemble_instruction(struct chunk *chunk, int32_t offset)
 		return simple_instruction("OP_PRINT", offset);
 	case OP_POP:
 		return simple_instruction("OP_POP", offset);
+	case OP_POPN:
+		return numbered_instruction("OP_POPN", chunk, offset);
 	case OP_DEFINE_GLOBAL:
 		return constant_instruction("OP_DEFINE_GLOBAL", chunk, offset);
 	case OP_DEFINE_GLOBAL_LONG:
@@ -196,6 +213,10 @@ int32_t disassemble_instruction(struct chunk *chunk, int32_t offset)
 	case OP_SET_GLOBAL_LONG:
 		return long_constant_instruction("OP_SET_GLOBAL_LONG", chunk,
 						 offset);
+	case OP_GET_LOCAL:
+		return byte_instruction("OP_GET_LOCAL", chunk, offset);
+	case OP_SET_LOCAL:
+		return byte_instruction("OP_SET_LOCAL", chunk, offset);
 	case OP_RETURN:
 		return simple_instruction("OP_RETURN", offset);
 	default:

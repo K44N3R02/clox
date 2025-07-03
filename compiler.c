@@ -1,12 +1,13 @@
-#include "chunk.h"
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
+#include "chunk.h"
+#include "common.h"
 #include "compiler.h"
 #include "object.h"
 #include "scanner.h"
 #include "value.h"
-#include <stdlib.h>
 #ifdef DEBUG_DUMP_CODE
 #include "debug.h"
 #endif
@@ -160,6 +161,47 @@ static void emit_return(void)
 	emit_byte(OP_RETURN);
 }
 
+struct local {
+	struct token name;
+	int depth;
+};
+
+struct compiler {
+	struct local locals[256];
+	int local_count;
+	int scope_depth;
+};
+
+struct compiler *current;
+
+static void init_compiler(struct compiler *compiler)
+{
+	compiler->local_count = 0;
+	compiler->scope_depth = 0;
+	current = compiler;
+}
+
+static void begin_scope(void)
+{
+	current->scope_depth++;
+}
+
+static void end_scope(void)
+{
+	uint8_t scope_locals = 0;
+
+	current->scope_depth--;
+
+	while (current->local_count > 0 &&
+	       current->locals[current->local_count - 1].depth >
+		       current->scope_depth) {
+		current->local_count--;
+		scope_locals++;
+	}
+
+	emit_bytes(OP_POPN, scope_locals);
+}
+
 static void end_compiler(void)
 {
 	emit_return();
@@ -224,19 +266,59 @@ static uint32_t identifier_constant(struct token *token)
 #pragma clang diagnostic pop
 }
 
+static bool identifiers_equal(struct token *name1, struct token *name2)
+{
+	if (name1->length != name2->length)
+		return false;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+	return memcmp(name1->start, name2->start, name1->length) == 0;
+#pragma clang diagnostic pop
+}
+
+static int32_t resolve_local(struct compiler *compiler, struct token *name)
+{
+	struct local *local;
+	int32_t i;
+
+	for (i = compiler->local_count - 1; i >= 0; i--) {
+		local = &compiler->locals[i];
+		if (identifiers_equal(&local->name, name)) {
+			if (local->depth == -1)
+				error("Can't read local variable in its own initializer.");
+			else
+				return i;
+		}
+	}
+
+	return -1;
+}
+
 static void named_variable(struct token token, bool can_assign)
 {
 	// This fills the constant table with identical strings even for set
 	// expressions. They point to same string but some of these entries are
 	// still unnecessary.
-	int32_t arg = identifier_constant(&token);
+	int32_t arg = resolve_local(current, &token);
+
+	if (arg != -1) {
+		if (can_assign && match(TOKEN_EQUAL)) {
+			expression();
+			emit_bytes(OP_SET_LOCAL, (uint8_t)arg);
+		} else {
+			emit_bytes(OP_GET_LOCAL, (uint8_t)arg);
+		}
+		return;
+	}
+
+	arg = identifier_constant(&token);
 
 	if (arg < 1 << 8) {
 		if (can_assign && match(TOKEN_EQUAL)) {
 			expression();
-			emit_bytes(OP_SET_GLOBAL, arg);
+			emit_bytes(OP_SET_GLOBAL, (uint8_t)arg);
 		} else {
-			emit_bytes(OP_GET_GLOBAL, arg);
+			emit_bytes(OP_GET_GLOBAL, (uint8_t)arg);
 		}
 	} else if (arg < 1 << 24) {
 		if (match(TOKEN_EQUAL)) {
@@ -386,22 +468,87 @@ static void expression(void)
 	parse_precedence(PREC_ASSIGNMENT);
 }
 
+static void block(void)
+{
+	while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF))
+		declaration();
+
+	consume(TOKEN_RIGHT_BRACE, "Expected '}' after block.");
+}
+
 static void statement(void)
 {
-	if (match(TOKEN_PRINT))
+	if (match(TOKEN_PRINT)) {
 		print_statement();
-	else
+	} else if (match(TOKEN_LEFT_BRACE)) {
+		begin_scope();
+		block();
+		end_scope();
+	} else {
 		expression_statement();
+	}
+}
+
+static void add_local(struct token name)
+{
+	struct local *local;
+
+	if (current->local_count >= 256) {
+		error("Too many local variables in function.");
+		return;
+	}
+
+	local = &current->locals[current->local_count++];
+	local->name = name;
+	local->depth = -1;
+}
+
+static void mark_initialized(void)
+{
+	current->locals[current->local_count - 1].depth = current->scope_depth;
+}
+
+static void declare_variable(void)
+{
+	struct token *name;
+	struct local *local;
+	int32_t i;
+
+	if (current->scope_depth == 0)
+		return;
+
+	name = &parser.previous;
+
+	for (i = current->local_count - 1; i >= 0; i--) {
+		local = &current->locals[i];
+		if (local->depth != -1 && local->depth < current->scope_depth)
+			break;
+
+		if (identifiers_equal(&local->name, name))
+			error("Already there is a local with same name.");
+	}
+
+	add_local(*name);
 }
 
 static uint32_t parse_variable(const char *msg)
 {
 	consume(TOKEN_IDENTIFIER, msg);
+
+	declare_variable();
+	if (current->scope_depth > 0)
+		return 0;
+
 	return identifier_constant(&parser.previous);
 }
 
 static void define_variable(uint32_t global)
 {
+	if (current->scope_depth > 0) {
+		mark_initialized();
+		return;
+	}
+
 	if (global < 1 << 8) {
 		emit_bytes(OP_DEFINE_GLOBAL, global);
 	} else if (global < 1 << 24) {
@@ -493,7 +640,10 @@ static struct parse_rule *get_rule(enum token_type token_type)
 
 bool compile(char *source, struct chunk *chunk)
 {
+	struct compiler compiler;
+
 	init_scanner(source);
+	init_compiler(&compiler);
 
 	compiling_chunk = chunk;
 

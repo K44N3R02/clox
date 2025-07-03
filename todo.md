@@ -45,6 +45,12 @@
         var ooops = "too many o's!";
         ```
 
+## Chapter 22
+- [ ] Think of a faster `resolve_local()` than O(n)
+- [ ] `var a = a;` What other languages do for this situation, what would you do?
+- [ ] Add support for constant variables, give compile time error if assign is attempted. `let a = 1; a = 2; // compile error`
+- [ ] Handle more than 256 locals
+
 # Design Notes
 ## Chapter 14
 - [ ] Preparing tests for language
@@ -57,6 +63,10 @@
 - [ ] Exception handling
 - [ ] Full stack trace when runtime error occurs
 
+## Chapter 22
+- [ ] Track the names of the locals for debugger
+
 # My Todos
 - [ ] Go through the chunk and resize the stack size of vm accordingly
 - [ ] Support `var x = 1, y, z="asd";`
+- [ ] Think about supporting shadow declarations `var x = 1; var x = x.to_str();`, may be useful for static typing

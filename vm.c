@@ -1,4 +1,3 @@
-#include "memory.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -7,6 +6,7 @@
 #include "compiler.h"
 #include "chunk.h"
 #include "debug.h"
+#include "memory.h"
 #include "object.h"
 #include "table.h"
 #include "value.h"
@@ -116,7 +116,7 @@ static enum interpret_result run(void)
 		push(result_type(AS_NUMBER(a) op AS_NUMBER(b)));              \
 	} while (0)
 
-	uint8_t instruction;
+	uint8_t instruction, local;
 	int32_t address;
 	value_t constant, a, b;
 	struct object_string *name;
@@ -208,6 +208,9 @@ static enum interpret_result run(void)
 		case OP_POP:
 			pop();
 			break;
+		case OP_POPN:
+			vm.stack_top -= READ_BYTE();
+			break;
 		case OP_DEFINE_GLOBAL:
 			name = READ_STRING(READ_BYTE());
 			table_set(&vm.globals, name, peek(0));
@@ -249,6 +252,14 @@ static enum interpret_result run(void)
 					      name->characters);
 				return INTERPRET_RUNTIME_ERROR;
 			}
+			break;
+		case OP_GET_LOCAL:
+			local = READ_BYTE();
+			push(vm.stack[local]);
+			break;
+		case OP_SET_LOCAL:
+			local = READ_BYTE();
+			vm.stack[local] = peek(0);
 			break;
 		case OP_RETURN:
 			return INTERPRET_OK;
