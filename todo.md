@@ -51,6 +51,10 @@
 - [ ] Add support for constant variables, give compile time error if assign is attempted. `let a = 1; a = 2; // compile error`
 - [ ] Handle more than 256 locals
 
+## Chapter 23
+- [ ] Add `switch` statement with with O(n) complexity, with automatic break, don't support fallthrough
+- [ ] Add `continue` and `break`, think about local variables, ensure they are in loop bodies
+
 # Design Notes
 ## Chapter 14
 - [ ] Preparing tests for language
@@ -70,3 +74,4 @@
 - [ ] Go through the chunk and resize the stack size of vm accordingly
 - [ ] Support `var x = 1, y, z="asd";`
 - [ ] Think about supporting shadow declarations `var x = 1; var x = x.to_str();`, may be useful for static typing
+- [ ] Implement `switch` with O(1) complexity

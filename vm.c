@@ -102,6 +102,7 @@ static void concatenate(void)
 static enum interpret_result run(void)
 {
 #define READ_BYTE() (*vm.ip++)
+#define READ_UINT16() (vm.ip += 2, (uint16_t)((vm.ip[-2] << 8) | vm.ip[-1]))
 #define READ_LONG_ARG() ((READ_BYTE() << 16) + (READ_BYTE() << 8) + READ_BYTE())
 #define FETCH_CONST(address) (vm.chunk->constants.values[(address)])
 #define READ_STRING(address) (AS_OBJ_STRING(FETCH_CONST((address))))
@@ -261,11 +262,26 @@ static enum interpret_result run(void)
 			local = READ_BYTE();
 			vm.stack[local] = peek(0);
 			break;
+		case OP_JUMP_IF_FALSE:
+			address = READ_UINT16();
+			if (is_false(peek(0)))
+				vm.ip += address;
+			// vm.ip += is_false(peek(0)) * address;
+			break;
+		case OP_JUMP:
+			address = READ_UINT16();
+			vm.ip += address;
+			break;
+		case OP_LOOP:
+			address = READ_UINT16();
+			vm.ip -= address;
+			break;
 		case OP_RETURN:
 			return INTERPRET_OK;
 		}
 	}
 #undef READ_BYTE
+#undef READ_UINT16
 #undef READ_LONG_ARG
 #undef FETCH_CONST
 #undef READ_STRING

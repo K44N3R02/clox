@@ -1,8 +1,8 @@
-#include "chunk.h"
 #include <stdint.h>
 #include <stdio.h>
 
 #include "common.h"
+#include "chunk.h"
 #include "debug.h"
 #include "object.h"
 #include "value.h"
@@ -150,6 +150,15 @@ static int32_t byte_instruction(char *name, struct chunk *chunk, int32_t offset)
 	return offset + 2;
 }
 
+static int32_t jump_instruction(char *name, int32_t sign, struct chunk *chunk,
+				int32_t offset)
+{
+	uint16_t jump = (uint16_t)(chunk->code[offset + 1]) << 8;
+	jump |= chunk->code[offset + 2];
+	printf("%-16s %4d -> %d\n", name, offset, offset + 3 + jump * sign);
+	return offset + 3;
+}
+
 int32_t disassemble_instruction(struct chunk *chunk, int32_t offset)
 {
 	uint8_t instruction;
@@ -217,6 +226,12 @@ int32_t disassemble_instruction(struct chunk *chunk, int32_t offset)
 		return byte_instruction("OP_GET_LOCAL", chunk, offset);
 	case OP_SET_LOCAL:
 		return byte_instruction("OP_SET_LOCAL", chunk, offset);
+	case OP_JUMP_IF_FALSE:
+		return jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, offset);
+	case OP_JUMP:
+		return jump_instruction("OP_JUMP", 1, chunk, offset);
+	case OP_LOOP:
+		return jump_instruction("OP_LOOP", -1, chunk, offset);
 	case OP_RETURN:
 		return simple_instruction("OP_RETURN", offset);
 	default:
