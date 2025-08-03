@@ -76,3 +76,4 @@
 - [ ] Think about supporting shadow declarations `var x = 1; var x = x.to_str();`, may be useful for static typing
 - [ ] Implement `switch` with O(1) complexity
 - [ ] Implement `goto`
+- [ ] String escape sequences
