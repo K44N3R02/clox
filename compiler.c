@@ -132,12 +132,52 @@ static void synchronize(void)
 	}
 }
 
-// byte emit helpers
-struct chunk *compiling_chunk;
+struct local {
+	struct token name;
+	int depth;
+};
 
+enum function_type {
+	TYPE_FUNCTION,
+	TYPE_SCRIPT,
+};
+
+struct compiler {
+	struct compiler *enclosing;
+	struct object_function *function;
+	enum function_type type;
+	struct local locals[256];
+	int local_count;
+	int scope_depth;
+};
+
+struct compiler *current = NULL;
+
+static void init_compiler(struct compiler *compiler, enum function_type type)
+{
+	struct local *local;
+
+	compiler->enclosing = current;
+	compiler->function = NULL;
+	compiler->type = type;
+	compiler->local_count = 0;
+	compiler->scope_depth = 0;
+	compiler->function = new_function();
+	current = compiler;
+	if (type != TYPE_SCRIPT)
+		current->function->name = copy_string(parser.previous.start,
+						      parser.previous.length);
+
+	local = &current->locals[current->local_count++];
+	local->depth = 0;
+	local->name.length = 0;
+	local->name.start = "";
+}
+
+// byte emit helpers
 static struct chunk *current_chunk(void)
 {
-	return compiling_chunk;
+	return &current->function->chunk;
 }
 
 static void emit_byte(uint8_t byte)
@@ -158,6 +198,7 @@ static void emit_constant(value_t value)
 
 static void emit_return(void)
 {
+	emit_byte(OP_NIL);
 	emit_byte(OP_RETURN);
 }
 
@@ -180,26 +221,7 @@ static void emit_loop(uint32_t loop_start)
 	emit_bytes((offset >> 8) & 0xff, offset & 0xff);
 }
 
-struct local {
-	struct token name;
-	int depth;
-};
-
-struct compiler {
-	struct local locals[256];
-	int local_count;
-	int scope_depth;
-};
-
-struct compiler *current;
-
-static void init_compiler(struct compiler *compiler)
-{
-	compiler->local_count = 0;
-	compiler->scope_depth = 0;
-	current = compiler;
-}
-
+// compiler utilities
 static void begin_scope(void)
 {
 	current->scope_depth++;
@@ -221,13 +243,24 @@ static void end_scope(void)
 	emit_bytes(OP_POPN, scope_locals);
 }
 
-static void end_compiler(void)
+static struct object_function *end_compiler(void)
 {
+	struct object_function *function;
+
 	emit_return();
+	function = current->function;
+
 #ifdef DEBUG_DUMP_CODE
 	if (!parser.had_error)
-		disassemble_chunk(current_chunk(), "code");
+		disassemble_chunk(current_chunk(),
+				  function->name != NULL ?
+					  function->name->characters :
+					  "<script>");
 #endif
+
+	current = current->enclosing;
+
+	return function;
 }
 
 // clox grammar
@@ -547,6 +580,29 @@ static void ternary(bool can_assign)
 	patch_jump(end_jump);
 }
 
+static uint8_t argument_list(void)
+{
+	uint8_t arg_count = 0;
+
+	if (!check(TOKEN_RIGHT_PAREN)) {
+		do {
+			expression();
+			if (arg_count == 255)
+				error("Cannot call a function with more than 255 arguments.");
+			arg_count++;
+		} while (match(TOKEN_COMMA));
+	}
+	consume(TOKEN_RIGHT_PAREN, "Expected ')' after argument list");
+
+	return arg_count;
+}
+
+static void call(bool can_assign)
+{
+	uint8_t arg_count = argument_list();
+	emit_bytes(OP_CALL, arg_count);
+}
+
 static void while_statement(void)
 {
 	uint16_t exit_jump;
@@ -617,6 +673,22 @@ static void for_statement(void)
 	end_scope();
 }
 
+static void return_statement(void)
+{
+	if (current->type == TYPE_SCRIPT) {
+		error("Cannot return from top-level code.");
+	}
+
+	if (match(TOKEN_SEMICOLON)) {
+		emit_return();
+	} else {
+		expression();
+		consume(TOKEN_SEMICOLON,
+			"Expected semicolon after return expression.");
+		emit_byte(OP_RETURN);
+	}
+}
+
 static void statement(void)
 {
 	if (match(TOKEN_PRINT)) {
@@ -631,6 +703,8 @@ static void statement(void)
 		begin_scope();
 		block();
 		end_scope();
+	} else if (match(TOKEN_RETURN)) {
+		return_statement();
 	} else {
 		expression_statement();
 	}
@@ -652,6 +726,8 @@ static void add_local(struct token name)
 
 static void mark_initialized(void)
 {
+	if (current->scope_depth == 0)
+		return;
 	current->locals[current->local_count - 1].depth = current->scope_depth;
 }
 
@@ -722,9 +798,51 @@ static void variable_declaration(void)
 	define_variable(global);
 }
 
+static void function(enum function_type type)
+{
+	struct compiler compiler;
+	struct object_function *function;
+	uint32_t constant;
+
+	init_compiler(&compiler, type);
+	begin_scope();
+
+	consume(TOKEN_LEFT_PAREN, "Expected '(' after function name.");
+	if (!match(TOKEN_RIGHT_PAREN)) {
+		do {
+			current->function->arity++;
+			if (current->function->arity > 255)
+				error_at_current(
+					"Function cannot have more than 255 parameters.");
+			constant = parse_variable("Expected parameter name.");
+			define_variable(constant);
+		} while (match(TOKEN_COMMA));
+		consume(TOKEN_RIGHT_PAREN, "Expected ')' after argument list.");
+	}
+	consume(TOKEN_LEFT_BRACE, "Expected '{' before function body.");
+
+	block();
+
+	function = end_compiler();
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+	emit_constant(CONS_OBJECT(function));
+#pragma clang diagnostic pop
+}
+
+static void function_declaration(void)
+{
+	uint8_t global = parse_variable("Expected function name.");
+	mark_initialized();
+	function(TYPE_FUNCTION);
+	define_variable(global);
+}
+
 static void declaration(void)
 {
-	if (match(TOKEN_VAR))
+	if (match(TOKEN_FUN))
+		function_declaration();
+	else if (match(TOKEN_VAR))
 		variable_declaration();
 	else
 		statement();
@@ -735,7 +853,7 @@ static void declaration(void)
 
 // clang-format off
 struct parse_rule rules[] = {
-	[TOKEN_LEFT_PAREN]	= { grouping,	NULL,		PREC_NONE },
+	[TOKEN_LEFT_PAREN]	= { grouping,	call,		PREC_CALL },
 	[TOKEN_RIGHT_PAREN]	= { NULL,	NULL,		PREC_NONE },
 	[TOKEN_LEFT_BRACE]	= { NULL,	NULL,		PREC_NONE },
 	[TOKEN_RIGHT_BRACE]	= { NULL,	NULL,		PREC_NONE },
@@ -785,14 +903,13 @@ static struct parse_rule *get_rule(enum token_type token_type)
 	return rules + token_type;
 }
 
-bool compile(char *source, struct chunk *chunk)
+struct object_function *compile(char *source)
 {
 	struct compiler compiler;
+	struct object_function *function;
 
 	init_scanner(source);
-	init_compiler(&compiler);
-
-	compiling_chunk = chunk;
+	init_compiler(&compiler, TYPE_SCRIPT);
 
 	parser.had_error = false;
 	parser.panic_mode = false;
@@ -803,7 +920,7 @@ bool compile(char *source, struct chunk *chunk)
 		declaration();
 	}
 
-	end_compiler();
+	function = end_compiler();
 
-	return !parser.had_error;
+	return !parser.had_error ? function : NULL;
 }

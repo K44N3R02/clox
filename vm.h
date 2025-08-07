@@ -2,11 +2,12 @@
 #define clox_vm_h
 
 #include "common.h"
-#include "chunk.h"
+#include "object.h"
 #include "table.h"
 #include "value.h"
 
-#define STACK_MAX 256
+#define FRAME_MAX 64
+#define STACK_MAX (FRAME_MAX * (1 << 8))
 
 enum interpret_result {
 	INTERPRET_OK,
@@ -14,9 +15,15 @@ enum interpret_result {
 	INTERPRET_RUNTIME_ERROR
 };
 
-struct vm {
-	struct chunk *chunk;
+struct call_frame {
+	struct object_function *function;
 	uint8_t *ip;
+	value_t *slots;
+};
+
+struct vm {
+	struct call_frame frames[FRAME_MAX];
+	int32_t frame_count;
 	value_t stack[STACK_MAX];
 	value_t *stack_top;
 	struct table strings;

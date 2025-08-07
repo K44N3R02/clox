@@ -25,6 +25,12 @@ static void print_type(value_t value)
 		case OBJECT_STRING:
 			printf(">string");
 			break;
+		case OBJECT_FUNCTION:
+			printf(">function");
+			break;
+		case OBJECT_NATIVE_FN:
+			printf(">native_fn");
+			break;
 		default:
 			fprintf(stderr,
 				"Unknown object type given to print_type.");
@@ -60,6 +66,11 @@ static void repr_value(value_t value)
 			       AS_OBJ_STRING(value)->length,
 			       AS_OBJ_STRING(value)->characters,
 			       AS_OBJ_STRING(value)->hash);
+			break;
+		case OBJECT_FUNCTION:
+			printf(" name:%s arity:%d",
+			       AS_OBJ_FUNCTION(value)->name->characters,
+			       AS_OBJ_FUNCTION(value)->arity);
 			break;
 		default:
 			fprintf(stderr,
@@ -232,6 +243,8 @@ int32_t disassemble_instruction(struct chunk *chunk, int32_t offset)
 		return jump_instruction("OP_JUMP", 1, chunk, offset);
 	case OP_LOOP:
 		return jump_instruction("OP_LOOP", -1, chunk, offset);
+	case OP_CALL:
+		return byte_instruction("OP_CALL", chunk, offset);
 	case OP_RETURN:
 		return simple_instruction("OP_RETURN", offset);
 	default:

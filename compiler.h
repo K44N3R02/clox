@@ -3,8 +3,9 @@
 
 #include "common.h"
 #include "chunk.h"
+#include "object.h"
 #include "vm.h"
 
-bool compile(char *source, struct chunk *chunk);
+struct object_function *compile(char *source);
 
 #endif

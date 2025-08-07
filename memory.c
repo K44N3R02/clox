@@ -1,3 +1,4 @@
+#include "chunk.h"
 #include "common.h"
 #include "object.h"
 #include "memory.h"
@@ -45,14 +46,21 @@ static void free_object(struct object *object)
 {
 	switch (object->object_type) {
 	case OBJECT_STRING: {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
-		struct object_string *str = object;
-#pragma clang diagnostic pop
+		struct object_string *str = (struct object_string *)object;
 		FREE_ARRAY(char, str->characters, str->length + 1);
 		FREE(struct object_string, object);
 		break;
 	}
+	case OBJECT_FUNCTION: {
+		struct object_function *fn = (struct object_function *)object;
+		free_chunk(&fn->chunk);
+		FREE(struct object_function, object);
+		// Don't need to free fn->name because of garbage collection
+		break;
+	}
+	case OBJECT_NATIVE_FN:
+		FREE(struct object_native_fn, object);
+		break;
 	default:
 		break;
 	}

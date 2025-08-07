@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdio.h>
 
+#include "chunk.h"
 #include "object.h"
 #include "memory.h"
 #include "vm.h"
@@ -10,11 +11,26 @@ bool is_object_type(value_t value, enum object_type object_type)
 	return IS_OBJECT(value) && AS_OBJECT(value)->object_type == object_type;
 }
 
+static void print_function(struct object_function *fn)
+{
+	if (fn->name == NULL) {
+		printf("<script>");
+		return;
+	}
+	printf("<fn %s>", fn->name->characters);
+}
+
 void print_object(value_t value)
 {
 	switch (OBJECT_TYPE(value)) {
 	case OBJECT_STRING:
 		printf("%s", AS_CSTRING(value));
+		break;
+	case OBJECT_FUNCTION:
+		print_function(AS_OBJ_FUNCTION(value));
+		break;
+	case OBJECT_NATIVE_FN:
+		printf("<native fn>");
 		break;
 	default: // UNREACHABLE
 		fprintf(stderr, "Unknown object type passed to print_object");
@@ -94,4 +110,22 @@ struct object_string *take_string(char *str, int32_t length)
 	}
 
 	return allocate_string(str, length, hash);
+}
+
+struct object_function *new_function(void)
+{
+	struct object_function *result =
+		ALLOCATE_OBJ(struct object_function, OBJECT_FUNCTION);
+	result->arity = 0;
+	result->name = NULL;
+	init_chunk(&result->chunk);
+	return result;
+}
+
+struct object_native_fn *new_native_fn(native_fn function)
+{
+	struct object_native_fn *result =
+		ALLOCATE_OBJ(struct object_native_fn, OBJECT_NATIVE_FN);
+	result->function = function;
+	return result;
 }

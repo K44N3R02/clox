@@ -55,6 +55,12 @@
 - [ ] Add `switch` statement with with O(n) complexity, with automatic break, don't support fallthrough
 - [ ] Add `continue` and `break`, think about local variables, ensure they are in loop bodies
 
+## Chapter 24
+- [ ] Try to keep `ip` in a register by holding it in a local variable and write to `call_frame` only when necessary. Benchmark to see if added complexity is worth it
+- [ ] Arity check for native functions
+- [ ] Let native functions signal runtime error
+- [ ] Add some more useful native functions
+
 # Design Notes
 ## Chapter 14
 - [ ] Preparing tests for language
@@ -70,6 +76,9 @@
 ## Chapter 22
 - [ ] Track the names of the locals for debugger
 
+## Chapter 24
+- [ ] Allow `return` at top-level code for early exiting and use it as exit code
+
 # My Todos
 - [ ] Go through the chunk and resize the stack size of vm accordingly
 - [ ] Support `var x = 1, y, z="asd";`
@@ -77,3 +86,5 @@
 - [ ] Implement `switch` with O(1) complexity
 - [ ] Implement `goto`
 - [ ] String escape sequences
+- [ ] Support expression functions `fun a(x) = x + 1 // fun a(x) { return x + 1; }`
+

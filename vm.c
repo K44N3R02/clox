@@ -1,6 +1,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "common.h"
 #include "compiler.h"
@@ -14,9 +15,27 @@
 
 struct vm vm;
 
+static void define_native_fn(const char *name, native_fn function)
+{
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+	push(CONS_OBJECT(copy_string(name, (int32_t)strlen(name))));
+	push(CONS_OBJECT(new_native_fn(function)));
+#pragma clang diagnostic pop
+	table_set(&vm.globals, AS_OBJ_STRING(vm.stack[0]), vm.stack[1]);
+	pop();
+	pop();
+}
+
+static value_t clock_native(int arg_count, value_t *args)
+{
+	return CONS_NUMBER((double)clock() / CLOCKS_PER_SEC);
+}
+
 static void reset_stack(void)
 {
 	vm.stack_top = vm.stack;
+	vm.frame_count = 0;
 }
 
 void init_vm(void)
@@ -25,6 +44,7 @@ void init_vm(void)
 	vm.objects = NULL;
 	init_table(&vm.globals);
 	init_table(&vm.strings);
+	define_native_fn("clock", clock_native);
 }
 
 void free_vm(void)
@@ -40,7 +60,9 @@ static value_t peek(int32_t distance)
 
 static void runtime_error(const char *format, ...)
 {
-	int32_t instruction;
+	int32_t instruction, i;
+	struct call_frame *frame;
+	struct object_function *function;
 	va_list args;
 
 	va_start(args, format);
@@ -48,9 +70,17 @@ static void runtime_error(const char *format, ...)
 	va_end(args);
 	fprintf(stderr, "\n");
 
-	instruction = vm.ip - vm.chunk->code - 1;
-	fprintf(stderr, "[line: %d] in script\n",
-		read_line(&vm.chunk->lines, instruction));
+	for (i = vm.frame_count - 1; i >= 0; i--) {
+		frame = &vm.frames[i];
+		function = frame->function;
+		instruction = frame->ip - function->chunk.code - 1;
+		fprintf(stderr, "[line %d] in ",
+			read_line(&function->chunk.lines, instruction));
+		if (function->name == NULL)
+			fprintf(stderr, "script\n");
+		else
+			fprintf(stderr, "%s()\n", function->name->characters);
+	}
 	reset_stack();
 }
 
@@ -99,12 +129,57 @@ static void concatenate(void)
 #pragma clang diagnostic pop
 }
 
+static bool call(struct object_function *function, int32_t arg_count)
+{
+	struct call_frame *frame;
+
+	if (function->arity != arg_count) {
+		runtime_error("Expected %d arguments, got %d.", function->arity,
+			      arg_count);
+		return false;
+	}
+	if (vm.frame_count == FRAME_MAX) {
+		runtime_error("Stack overflow.");
+		return false;
+	}
+	frame = &vm.frames[vm.frame_count++];
+	frame->function = function;
+	frame->ip = function->chunk.code;
+	frame->slots = vm.stack_top - arg_count - 1;
+	return true;
+}
+
+static bool call_value(value_t value, int32_t arg_count)
+{
+	if (IS_OBJECT(value)) {
+		switch (OBJECT_TYPE(value)) {
+		case OBJECT_FUNCTION:
+			return call(AS_OBJ_FUNCTION(value), arg_count);
+		case OBJECT_NATIVE_FN: {
+			native_fn native = AS_OBJ_NATIVE_FN(value);
+			value_t result =
+				native(arg_count, vm.stack_top - arg_count);
+			vm.stack_top -= arg_count + 1;
+			push(result);
+			return true;
+		}
+		default:
+			break;
+		}
+	}
+	runtime_error("Only functions and classes can be called.");
+	return false;
+}
+
 static enum interpret_result run(void)
 {
-#define READ_BYTE() (*vm.ip++)
-#define READ_UINT16() (vm.ip += 2, (uint16_t)((vm.ip[-2] << 8) | vm.ip[-1]))
+	struct call_frame *frame = &vm.frames[vm.frame_count - 1];
+#define READ_BYTE() (*frame->ip++)
+#define READ_UINT16() \
+	(frame->ip += 2, (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
 #define READ_LONG_ARG() ((READ_BYTE() << 16) + (READ_BYTE() << 8) + READ_BYTE())
-#define FETCH_CONST(address) (vm.chunk->constants.values[(address)])
+#define FETCH_CONST(address) \
+	(frame->function->chunk.constants.values[(address)])
 #define READ_STRING(address) (AS_OBJ_STRING(FETCH_CONST((address))))
 #define BINARY_OP(result_type, op)                                            \
 	do {                                                                  \
@@ -118,8 +193,8 @@ static enum interpret_result run(void)
 	} while (0)
 
 	uint8_t instruction, local;
-	int32_t address;
-	value_t constant, a, b;
+	int32_t address, arg_count;
+	value_t constant, a, b, result;
 	struct object_string *name;
 #ifdef DEBUG_TRACE_EXECUTION
 	value_t *slot;
@@ -134,8 +209,9 @@ static enum interpret_result run(void)
 			printf(" ]");
 		}
 		printf("\n");
-		disassemble_instruction(vm.chunk,
-					(int32_t)(vm.ip - vm.chunk->code));
+		disassemble_instruction(
+			&frame->function->chunk,
+			(int32_t)(frame->ip - frame->function->chunk.code));
 #endif
 		switch (instruction = READ_BYTE()) {
 		case OP_CONSTANT:
@@ -256,28 +332,43 @@ static enum interpret_result run(void)
 			break;
 		case OP_GET_LOCAL:
 			local = READ_BYTE();
-			push(vm.stack[local]);
+			push(frame->slots[local]);
 			break;
 		case OP_SET_LOCAL:
 			local = READ_BYTE();
-			vm.stack[local] = peek(0);
+			frame->slots[local] = peek(0);
 			break;
 		case OP_JUMP_IF_FALSE:
 			address = READ_UINT16();
 			if (is_false(peek(0)))
-				vm.ip += address;
-			// vm.ip += is_false(peek(0)) * address;
+				frame->ip += address;
+			// frame->ip += is_false(peek(0)) * address;
 			break;
 		case OP_JUMP:
 			address = READ_UINT16();
-			vm.ip += address;
+			frame->ip += address;
 			break;
 		case OP_LOOP:
 			address = READ_UINT16();
-			vm.ip -= address;
+			frame->ip -= address;
+			break;
+		case OP_CALL:
+			arg_count = READ_BYTE();
+			if (!call_value(peek(arg_count), arg_count))
+				return INTERPRET_RUNTIME_ERROR;
+			frame = &vm.frames[vm.frame_count - 1];
 			break;
 		case OP_RETURN:
-			return INTERPRET_OK;
+			result = pop();
+			vm.frame_count--;
+			if (vm.frame_count == 0) {
+				pop();
+				return INTERPRET_OK;
+			}
+			vm.stack_top = frame->slots;
+			push(result);
+			frame = &vm.frames[vm.frame_count - 1];
+			break;
 		}
 	}
 #undef READ_BYTE
@@ -291,24 +382,19 @@ static enum interpret_result run(void)
 // TODO: Go through the chunk and resize the stack size of vm accordingly
 enum interpret_result interpret(char *source)
 {
-	struct chunk chunk;
-	enum interpret_result result;
+	struct object_function *function;
 
-	init_chunk(&chunk);
+	function = compile(source);
+	if (function == NULL)
+		return INTERPRET_COMPILE_ERROR;
 
-	if (!compile(source, &chunk)) {
-		result = INTERPRET_COMPILE_ERROR;
-		goto out_free_chunk;
-	}
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+	push(CONS_OBJECT(function));
+#pragma clang diagnostic pop
+	call(function, 0);
 
-	vm.chunk = &chunk;
-	vm.ip = vm.chunk->code;
-
-	result = run();
-
-out_free_chunk:
-	free_chunk(&chunk);
-	return result;
+	return run();
 }
 
 void push(value_t value)
