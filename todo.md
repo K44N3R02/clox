@@ -87,4 +87,5 @@
 - [ ] Implement `goto`
 - [ ] String escape sequences
 - [ ] Support expression functions `fun a(x) = x + 1 // fun a(x) { return x + 1; }`
+- [ ] Add lambda functions `(fun (x) { print x; })(2);`
 
