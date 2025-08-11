@@ -6,7 +6,6 @@
 #include "common.h"
 #include "compiler.h"
 #include "chunk.h"
-#include "debug.h"
 #include "memory.h"
 #include "object.h"
 #include "table.h"
@@ -183,6 +182,7 @@ static enum interpret_result run(void)
 #define READ_STRING(address) (AS_OBJ_STRING(FETCH_CONST((address))))
 #define BINARY_OP(result_type, op)                                            \
 	do {                                                                  \
+		value_t a, b;                                                 \
 		if (!(IS_NUMBER(peek(0)) && IS_NUMBER(peek(1)))) {            \
 			runtime_error("Binary %s requires two numbers", #op); \
 			return INTERPRET_RUNTIME_ERROR;                       \
@@ -192,9 +192,7 @@ static enum interpret_result run(void)
 		push(result_type(AS_NUMBER(a) op AS_NUMBER(b)));              \
 	} while (0)
 
-	uint8_t instruction, local;
-	int32_t address, arg_count;
-	value_t constant, a, b, result;
+	uint8_t instruction;
 	struct object_string *name;
 #ifdef DEBUG_TRACE_EXECUTION
 	value_t *slot;
@@ -214,29 +212,35 @@ static enum interpret_result run(void)
 			(int32_t)(frame->ip - frame->function->chunk.code));
 #endif
 		switch (instruction = READ_BYTE()) {
-		case OP_CONSTANT:
-			address = READ_BYTE();
-			constant = FETCH_CONST(address);
+		case OP_CONSTANT: {
+			int32_t address = READ_BYTE();
+			value_t constant = FETCH_CONST(address);
 			push(constant);
 			break;
-		case OP_CONSTANT_LONG:
-			address = READ_LONG_ARG();
-			constant = FETCH_CONST(address);
+		}
+		case OP_CONSTANT_LONG: {
+			int32_t address = READ_LONG_ARG();
+			value_t constant = FETCH_CONST(address);
 			push(constant);
 			break;
-		case OP_NIL:
+		}
+		case OP_NIL: {
 			push(CONS_NIL);
 			break;
-		case OP_TRUE:
+		}
+		case OP_TRUE: {
 			push(CONS_BOOLEAN(true));
 			break;
-		case OP_FALSE:
+		}
+		case OP_FALSE: {
 			push(CONS_BOOLEAN(false));
 			break;
-		case OP_NOT:
+		}
+		case OP_NOT: {
 			push(CONS_BOOLEAN(is_false(pop())));
 			break;
-		case OP_NEGATE:
+		}
+		case OP_NEGATE: {
 			if (!IS_NUMBER(peek(0))) {
 				runtime_error(
 					"Unary negation requires a number.");
@@ -245,7 +249,9 @@ static enum interpret_result run(void)
 
 			AS_NUMBER(vm.stack_top[-1]) *= -1;
 			break;
-		case OP_ADD:
+		}
+		case OP_ADD: {
+			value_t a, b;
 			if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
 				b = pop();
 				a = pop();
@@ -258,51 +264,68 @@ static enum interpret_result run(void)
 				return INTERPRET_RUNTIME_ERROR;
 			}
 			break;
-		case OP_SUB:
+		}
+		case OP_SUB: {
 			BINARY_OP(CONS_NUMBER, -);
 			break;
-		case OP_MUL:
+		}
+		case OP_MUL: {
 			BINARY_OP(CONS_NUMBER, *);
 			break;
-		case OP_DIV:
+		}
+		case OP_DIV: {
 			BINARY_OP(CONS_NUMBER, /);
 			break;
-		case OP_EQUAL:
+		}
+		case OP_EQUAL: {
+			value_t a, b;
 			b = pop();
 			a = pop();
 			push(CONS_BOOLEAN(is_equal(a, b)));
 			break;
-		case OP_LESS:
+		}
+		case OP_LESS: {
 			BINARY_OP(CONS_BOOLEAN, <);
 			break;
-		case OP_GREATER:
+		}
+		case OP_GREATER: {
 			BINARY_OP(CONS_BOOLEAN, >);
 			break;
-		case OP_PRINT:
+		}
+		case OP_PRINT: {
 			print_value(pop());
 			printf("\n");
 			break;
-		case OP_POP:
+		}
+		case OP_POP: {
 			pop();
 			break;
-		case OP_POPN:
+		}
+		case OP_POPN: {
 			vm.stack_top -= READ_BYTE();
 			break;
-		case OP_DEFINE_GLOBAL:
+		}
+		case OP_DEFINE_GLOBAL: {
+			struct object_string *name;
 			name = READ_STRING(READ_BYTE());
 			table_set(&vm.globals, name, peek(0));
 			// Garbage collection may trigger, pop after writing
 			// to table is completed
 			pop();
 			break;
-		case OP_DEFINE_GLOBAL_LONG:
+		}
+		case OP_DEFINE_GLOBAL_LONG: {
+			struct object_string *name;
 			name = READ_STRING(READ_LONG_ARG());
 			table_set(&vm.globals, name, peek(0));
 			// Garbage collection may trigger, pop after writing
 			// to table is completed
 			pop();
 			break;
-		case OP_GET_GLOBAL:
+		}
+		case OP_GET_GLOBAL: {
+			struct object_string *name;
+			value_t a;
 			name = READ_STRING(READ_BYTE());
 			if (!table_get(&vm.globals, name, &a)) {
 				runtime_error("Undefined variable '%s'.",
@@ -311,7 +334,10 @@ static enum interpret_result run(void)
 			}
 			push(a);
 			break;
-		case OP_GET_GLOBAL_LONG:
+		}
+		case OP_GET_GLOBAL_LONG: {
+			struct object_string *name;
+			value_t a;
 			name = READ_STRING(READ_LONG_ARG());
 			if (!table_get(&vm.globals, name, &a)) {
 				runtime_error("Undefined variable '%s'.",
@@ -320,7 +346,9 @@ static enum interpret_result run(void)
 			}
 			push(a);
 			break;
-		case OP_SET_GLOBAL:
+		}
+		case OP_SET_GLOBAL: {
+			struct object_string *name;
 			name = READ_STRING(READ_BYTE());
 			// This disables implicit variable declaration
 			if (table_set(&vm.globals, name, peek(0))) {
@@ -330,36 +358,43 @@ static enum interpret_result run(void)
 				return INTERPRET_RUNTIME_ERROR;
 			}
 			break;
-		case OP_GET_LOCAL:
-			local = READ_BYTE();
+		}
+		case OP_GET_LOCAL: {
+			uint8_t local = READ_BYTE();
 			push(frame->slots[local]);
 			break;
-		case OP_SET_LOCAL:
-			local = READ_BYTE();
+		}
+		case OP_SET_LOCAL: {
+			uint8_t local = READ_BYTE();
 			frame->slots[local] = peek(0);
 			break;
-		case OP_JUMP_IF_FALSE:
-			address = READ_UINT16();
+		}
+		case OP_JUMP_IF_FALSE: {
+			uint16_t address = READ_UINT16();
 			if (is_false(peek(0)))
 				frame->ip += address;
 			// frame->ip += is_false(peek(0)) * address;
 			break;
-		case OP_JUMP:
-			address = READ_UINT16();
+		}
+		case OP_JUMP: {
+			uint16_t address = READ_UINT16();
 			frame->ip += address;
 			break;
-		case OP_LOOP:
-			address = READ_UINT16();
+		}
+		case OP_LOOP: {
+			uint16_t address = READ_UINT16();
 			frame->ip -= address;
 			break;
-		case OP_CALL:
-			arg_count = READ_BYTE();
+		}
+		case OP_CALL: {
+			uint8_t arg_count = READ_BYTE();
 			if (!call_value(peek(arg_count), arg_count))
 				return INTERPRET_RUNTIME_ERROR;
 			frame = &vm.frames[vm.frame_count - 1];
 			break;
-		case OP_RETURN:
-			result = pop();
+		}
+		case OP_RETURN: {
+			value_t result = pop();
 			vm.frame_count--;
 			if (vm.frame_count == 0) {
 				pop();
@@ -369,6 +404,7 @@ static enum interpret_result run(void)
 			push(result);
 			frame = &vm.frames[vm.frame_count - 1];
 			break;
+		}
 		}
 	}
 #undef READ_BYTE
