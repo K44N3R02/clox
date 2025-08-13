@@ -61,6 +61,10 @@
 - [ ] Let native functions signal runtime error
 - [ ] Add some more useful native functions
 
+## Chapter 25
+- [ ] Only wrap functions using upvalues with object_closure
+- [ ] Add an option to capture values instead of variables `fun x() capture {}`
+
 # Design Notes
 ## Chapter 14
 - [ ] Preparing tests for language
@@ -87,5 +91,6 @@
 - [ ] Implement `goto`
 - [ ] String escape sequences
 - [ ] Support expression functions `fun a(x) = x + 1 // fun a(x) { return x + 1; }`
-- [ ] Add lambda functions `(fun (x) { print x; })(2);`
+- [ ] Add lambda functions `(fun (x) { print x; })(2); (fun (x) = x * 2)(3);`
+- [ ] Add documentation for each function
 

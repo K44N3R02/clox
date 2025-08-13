@@ -135,6 +135,12 @@ static void synchronize(void)
 struct local {
 	struct token name;
 	int depth;
+	bool is_captured;
+};
+
+struct upvalue {
+	uint8_t index;
+	bool is_local;
 };
 
 enum function_type {
@@ -148,6 +154,7 @@ struct compiler {
 	enum function_type type;
 	struct local locals[256];
 	int local_count;
+	struct upvalue upvalues[256];
 	int scope_depth;
 };
 
@@ -172,6 +179,7 @@ static void init_compiler(struct compiler *compiler, enum function_type type)
 	local->depth = 0;
 	local->name.length = 0;
 	local->name.start = "";
+	local->is_captured = false;
 }
 
 // byte emit helpers
@@ -193,7 +201,14 @@ static void emit_bytes(uint8_t byte1, uint8_t byte2)
 
 static void emit_constant(value_t value)
 {
-	write_constant(current_chunk(), value, parser.previous.line);
+	write_constant(current_chunk(), OP_CONSTANT, value,
+		       parser.previous.line);
+}
+
+static void emit_closure(value_t value)
+{
+	write_constant(current_chunk(), OP_CLOSURE, value,
+		       parser.previous.line);
 }
 
 static void emit_return(void)
@@ -229,18 +244,17 @@ static void begin_scope(void)
 
 static void end_scope(void)
 {
-	uint8_t scope_locals = 0;
-
 	current->scope_depth--;
 
 	while (current->local_count > 0 &&
 	       current->locals[current->local_count - 1].depth >
 		       current->scope_depth) {
+		if (current->locals[current->local_count - 1].is_captured)
+			emit_byte(OP_CLOSE_UPVALUE);
+		else
+			emit_byte(OP_POP);
 		current->local_count--;
-		scope_locals++;
 	}
-
-	emit_bytes(OP_POPN, scope_locals);
 }
 
 static struct object_function *end_compiler(void)
@@ -346,6 +360,47 @@ static int32_t resolve_local(struct compiler *compiler, struct token *name)
 	return -1;
 }
 
+static int32_t add_upvalue(struct compiler *compiler, uint8_t index,
+			   bool is_local)
+{
+	int32_t upvalue_count = compiler->function->upvalue_count, i;
+
+	for (i = 0; i < upvalue_count; i++) {
+		struct upvalue *upvalue = &compiler->upvalues[i];
+		if (upvalue->is_local == is_local && upvalue->index == index)
+			return i;
+	}
+
+	if (compiler->function->upvalue_count == 256) {
+		error("Too many closure variables in a function.");
+		return 0;
+	}
+
+	compiler->upvalues[upvalue_count].is_local = is_local;
+	compiler->upvalues[upvalue_count].index = index;
+	return compiler->function->upvalue_count++;
+}
+
+static int32_t resolve_upvalue(struct compiler *compiler, struct token *name)
+{
+	int32_t local;
+
+	if (compiler->enclosing == NULL)
+		return -1;
+
+	local = resolve_local(compiler->enclosing, name);
+	if (local != -1) {
+		compiler->enclosing->locals[local].is_captured = true;
+		return add_upvalue(compiler, (uint8_t)local, true);
+	}
+
+	local = resolve_upvalue(compiler->enclosing, name);
+	if (local != -1)
+		return add_upvalue(compiler, (uint8_t)local, false);
+
+	return -1;
+}
+
 static void named_variable(struct token token, bool can_assign)
 {
 	// This fills the constant table with identical strings even for set
@@ -359,6 +414,18 @@ static void named_variable(struct token token, bool can_assign)
 			emit_bytes(OP_SET_LOCAL, (uint8_t)arg);
 		} else {
 			emit_bytes(OP_GET_LOCAL, (uint8_t)arg);
+		}
+		return;
+	}
+
+	arg = resolve_upvalue(current, &token);
+
+	if (arg != -1) {
+		if (can_assign && match(TOKEN_EQUAL)) {
+			expression();
+			emit_bytes(OP_SET_UPVALUE, (uint8_t)arg);
+		} else {
+			emit_bytes(OP_GET_UPVALUE, (uint8_t)arg);
 		}
 		return;
 	}
@@ -722,6 +789,7 @@ static void add_local(struct token name)
 	local = &current->locals[current->local_count++];
 	local->name = name;
 	local->depth = -1;
+	local->is_captured = false;
 }
 
 static void mark_initialized(void)
@@ -803,6 +871,7 @@ static void function(enum function_type type)
 	struct compiler compiler;
 	struct object_function *function;
 	uint32_t constant;
+	int32_t i;
 
 	init_compiler(&compiler, type);
 	begin_scope();
@@ -826,8 +895,11 @@ static void function(enum function_type type)
 	function = end_compiler();
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wincompatible-pointer-types"
-	emit_constant(CONS_OBJECT(function));
+	emit_closure(CONS_OBJECT(function));
 #pragma clang diagnostic pop
+	for (i = 0; i < function->upvalue_count; i++)
+		emit_bytes(compiler.upvalues[i].is_local ? 1 : 0,
+			   compiler.upvalues[i].index);
 }
 
 static void function_declaration(void)

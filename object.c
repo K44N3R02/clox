@@ -1,3 +1,4 @@
+#include "value.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -31,6 +32,12 @@ void print_object(value_t value)
 		break;
 	case OBJECT_NATIVE_FN:
 		printf("<native fn>");
+		break;
+	case OBJECT_CLOSURE:
+		print_function(AS_OBJ_CLOSURE(value)->function);
+		break;
+	case OBJECT_UPVALUE:
+		printf("upvalue");
 		break;
 	default: // UNREACHABLE
 		fprintf(stderr, "Unknown object type passed to print_object");
@@ -117,6 +124,7 @@ struct object_function *new_function(void)
 	struct object_function *result =
 		ALLOCATE_OBJ(struct object_function, OBJECT_FUNCTION);
 	result->arity = 0;
+	result->upvalue_count = 0;
 	result->name = NULL;
 	init_chunk(&result->chunk);
 	return result;
@@ -127,5 +135,32 @@ struct object_native_fn *new_native_fn(native_fn function)
 	struct object_native_fn *result =
 		ALLOCATE_OBJ(struct object_native_fn, OBJECT_NATIVE_FN);
 	result->function = function;
+	return result;
+}
+
+struct object_upvalue *new_upvalue(value_t *slot)
+{
+	struct object_upvalue *result =
+		ALLOCATE_OBJ(struct object_upvalue, OBJECT_UPVALUE);
+	result->location = slot;
+	result->container = CONS_NIL;
+	result->next = NULL;
+	return result;
+}
+
+struct object_closure *new_closure(struct object_function *function)
+{
+	struct object_closure *result =
+		ALLOCATE_OBJ(struct object_closure, OBJECT_CLOSURE);
+	struct object_upvalue **upvalues =
+		ALLOCATE(struct object_upvalue *, function->upvalue_count);
+	int32_t i;
+
+	for (i = 0; i < function->upvalue_count; i++)
+		upvalues[i] = NULL;
+
+	result->function = function;
+	result->upvalues = upvalues;
+	result->upvalue_count = function->upvalue_count;
 	return result;
 }

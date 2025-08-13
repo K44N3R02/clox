@@ -31,6 +31,12 @@ static void print_type(value_t value)
 		case OBJECT_NATIVE_FN:
 			printf(">native_fn");
 			break;
+		case OBJECT_CLOSURE:
+			printf(">closure");
+			break;
+		case OBJECT_UPVALUE:
+			printf(">upvalue");
+			break;
 		default:
 			fprintf(stderr,
 				"Unknown object type given to print_type.");
@@ -71,6 +77,16 @@ static void repr_value(value_t value)
 			printf(" name:%s arity:%d",
 			       AS_OBJ_FUNCTION(value)->name->characters,
 			       AS_OBJ_FUNCTION(value)->arity);
+			break;
+		case OBJECT_NATIVE_FN:
+			printf(" native-fn");
+			break;
+		case OBJECT_CLOSURE:
+			printf(" fn-ptr:%p", AS_OBJ_CLOSURE(value)->function);
+			break;
+		case OBJECT_UPVALUE:
+			printf(" value-ptr:%p",
+			       AS_OBJ_UPVALUE(value)->location);
 			break;
 		default:
 			fprintf(stderr,
@@ -170,6 +186,40 @@ static int32_t jump_instruction(char *name, int32_t sign, struct chunk *chunk,
 	return offset + 3;
 }
 
+static int32_t closure_instruction(struct chunk *chunk, int32_t offset)
+{
+	uint8_t const_addr = chunk->code[offset + 1];
+	struct object_function *function =
+		AS_OBJ_FUNCTION(chunk->constants.values[const_addr]);
+	int32_t i, is_local, index;
+
+	printf("%-16s %4d ", "OP_CLOSURE", const_addr);
+	print_value(chunk->constants.values[const_addr]);
+	printf("\n");
+
+	for (i = 0; i < function->upvalue_count; i++) {
+		is_local = chunk->code[offset++];
+		index = chunk->code[offset++];
+		printf("%04d      |                     %s %d\n", offset - 2,
+		       is_local ? "local" : "upvalue", index);
+	}
+
+	return offset + 2;
+}
+
+static int32_t long_closure_instruction(struct chunk *chunk, int32_t offset)
+{
+	uint8_t const_addr1 = chunk->code[offset + 1],
+		const_addr2 = chunk->code[offset + 2],
+		const_addr3 = chunk->code[offset + 3];
+	int32_t const_addr =
+		(const_addr1 << 16) + (const_addr2 << 8) + const_addr3;
+	printf("%-16s %4d ", "OP_CLOSURE_LONG", const_addr);
+	print_value(chunk->constants.values[const_addr]);
+	printf("\n");
+	return offset + 4;
+}
+
 int32_t disassemble_instruction(struct chunk *chunk, int32_t offset)
 {
 	uint8_t instruction;
@@ -245,6 +295,16 @@ int32_t disassemble_instruction(struct chunk *chunk, int32_t offset)
 		return jump_instruction("OP_LOOP", -1, chunk, offset);
 	case OP_CALL:
 		return byte_instruction("OP_CALL", chunk, offset);
+	case OP_CLOSURE:
+		return closure_instruction(chunk, offset);
+	case OP_CLOSURE_LONG:
+		return long_closure_instruction(chunk, offset);
+	case OP_GET_UPVALUE:
+		return byte_instruction("OP_GET_UPVALUE", chunk, offset);
+	case OP_SET_UPVALUE:
+		return byte_instruction("OP_SET_UPVALUE", chunk, offset);
+	case OP_CLOSE_UPVALUE:
+		return simple_instruction("OP_CLOSE_UPVALUE", offset);
 	case OP_RETURN:
 		return simple_instruction("OP_RETURN", offset);
 	default:

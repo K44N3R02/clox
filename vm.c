@@ -6,6 +6,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "chunk.h"
+#include "debug.h"
 #include "memory.h"
 #include "object.h"
 #include "table.h"
@@ -35,6 +36,7 @@ static void reset_stack(void)
 {
 	vm.stack_top = vm.stack;
 	vm.frame_count = 0;
+	vm.open_upvalues = NULL;
 }
 
 void init_vm(void)
@@ -71,7 +73,7 @@ static void runtime_error(const char *format, ...)
 
 	for (i = vm.frame_count - 1; i >= 0; i--) {
 		frame = &vm.frames[i];
-		function = frame->function;
+		function = frame->closure->function;
 		instruction = frame->ip - function->chunk.code - 1;
 		fprintf(stderr, "[line %d] in ",
 			read_line(&function->chunk.lines, instruction));
@@ -128,13 +130,13 @@ static void concatenate(void)
 #pragma clang diagnostic pop
 }
 
-static bool call(struct object_function *function, int32_t arg_count)
+static bool call(struct object_closure *closure, int32_t arg_count)
 {
 	struct call_frame *frame;
 
-	if (function->arity != arg_count) {
-		runtime_error("Expected %d arguments, got %d.", function->arity,
-			      arg_count);
+	if (closure->function->arity != arg_count) {
+		runtime_error("Expected %d arguments, got %d.",
+			      closure->function->arity, arg_count);
 		return false;
 	}
 	if (vm.frame_count == FRAME_MAX) {
@@ -142,8 +144,8 @@ static bool call(struct object_function *function, int32_t arg_count)
 		return false;
 	}
 	frame = &vm.frames[vm.frame_count++];
-	frame->function = function;
-	frame->ip = function->chunk.code;
+	frame->closure = closure;
+	frame->ip = closure->function->chunk.code;
 	frame->slots = vm.stack_top - arg_count - 1;
 	return true;
 }
@@ -152,8 +154,8 @@ static bool call_value(value_t value, int32_t arg_count)
 {
 	if (IS_OBJECT(value)) {
 		switch (OBJECT_TYPE(value)) {
-		case OBJECT_FUNCTION:
-			return call(AS_OBJ_FUNCTION(value), arg_count);
+		case OBJECT_CLOSURE:
+			return call(AS_OBJ_CLOSURE(value), arg_count);
 		case OBJECT_NATIVE_FN: {
 			native_fn native = AS_OBJ_NATIVE_FN(value);
 			value_t result =
@@ -170,6 +172,42 @@ static bool call_value(value_t value, int32_t arg_count)
 	return false;
 }
 
+static struct object_upvalue *capture_upvalue(value_t *value)
+{
+	struct object_upvalue *upvalue = vm.open_upvalues, *prev_upvalue = NULL,
+			      *captured_upvalue = NULL;
+
+	while (upvalue != NULL && upvalue->location > value) {
+		prev_upvalue = upvalue;
+		upvalue = upvalue->next;
+	}
+
+	if (upvalue != NULL && upvalue->location == value)
+		return upvalue;
+
+	captured_upvalue = new_upvalue(value);
+	captured_upvalue->next = upvalue;
+
+	if (prev_upvalue != NULL)
+		prev_upvalue->next = captured_upvalue;
+	else
+		vm.open_upvalues = captured_upvalue;
+
+	return captured_upvalue;
+}
+
+static void close_upvalues(value_t *last)
+{
+	struct object_upvalue *upvalue;
+
+	while (vm.open_upvalues != NULL && vm.open_upvalues->location >= last) {
+		upvalue = vm.open_upvalues;
+		upvalue->container = *upvalue->location;
+		upvalue->location = &upvalue->container;
+		vm.open_upvalues = upvalue->next;
+	}
+}
+
 static enum interpret_result run(void)
 {
 	struct call_frame *frame = &vm.frames[vm.frame_count - 1];
@@ -178,7 +216,7 @@ static enum interpret_result run(void)
 	(frame->ip += 2, (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
 #define READ_LONG_ARG() ((READ_BYTE() << 16) + (READ_BYTE() << 8) + READ_BYTE())
 #define FETCH_CONST(address) \
-	(frame->function->chunk.constants.values[(address)])
+	(frame->closure->function->chunk.constants.values[(address)])
 #define READ_STRING(address) (AS_OBJ_STRING(FETCH_CONST((address))))
 #define BINARY_OP(result_type, op)                                            \
 	do {                                                                  \
@@ -193,9 +231,9 @@ static enum interpret_result run(void)
 	} while (0)
 
 	uint8_t instruction;
-	struct object_string *name;
 #ifdef DEBUG_TRACE_EXECUTION
 	value_t *slot;
+	printf("\nexecution trace:\n");
 #endif
 
 	for (;;) {
@@ -208,8 +246,9 @@ static enum interpret_result run(void)
 		}
 		printf("\n");
 		disassemble_instruction(
-			&frame->function->chunk,
-			(int32_t)(frame->ip - frame->function->chunk.code));
+			&frame->closure->function->chunk,
+			(int32_t)(frame->ip -
+				  frame->closure->function->chunk.code));
 #endif
 		switch (instruction = READ_BYTE()) {
 		case OP_CONSTANT: {
@@ -393,8 +432,72 @@ static enum interpret_result run(void)
 			frame = &vm.frames[vm.frame_count - 1];
 			break;
 		}
+		case OP_GET_UPVALUE: {
+			uint8_t slot = READ_BYTE();
+			push(*frame->closure->upvalues[slot]->location);
+			break;
+		}
+		case OP_SET_UPVALUE: {
+			uint8_t slot = READ_BYTE();
+			*frame->closure->upvalues[slot]->location = peek(0);
+			break;
+		}
+		case OP_CLOSE_UPVALUE: {
+			close_upvalues(vm.stack_top - 1);
+			pop();
+			break;
+		}
+		case OP_CLOSURE: {
+			uint8_t address = READ_BYTE();
+			value_t value = FETCH_CONST(address);
+			struct object_function *function =
+				AS_OBJ_FUNCTION(value);
+			struct object_closure *closure = new_closure(function);
+			int32_t i;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+			push(CONS_OBJECT(closure));
+#pragma clang diagnostic pop
+
+			for (i = 0; i < closure->upvalue_count; i++) {
+				uint8_t is_local = READ_BYTE();
+				uint8_t index = READ_BYTE();
+				if (is_local)
+					closure->upvalues[i] = capture_upvalue(
+						frame->slots + index);
+				else
+					closure->upvalues[i] =
+						frame->closure->upvalues[index];
+			}
+			break;
+		}
+		case OP_CLOSURE_LONG: {
+			int32_t address = READ_LONG_ARG();
+			value_t value = FETCH_CONST(address);
+			struct object_function *function =
+				AS_OBJ_FUNCTION(value);
+			struct object_closure *closure = new_closure(function);
+			int32_t i;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wincompatible-pointer-types"
+			push(CONS_OBJECT(closure));
+#pragma clang diagnostic pop
+
+			for (i = 0; i < closure->upvalue_count; i++) {
+				uint8_t is_local = READ_BYTE();
+				uint8_t index = READ_BYTE();
+				if (is_local)
+					closure->upvalues[i] = capture_upvalue(
+						frame->slots + index);
+				else
+					closure->upvalues[i] =
+						frame->closure->upvalues[index];
+			}
+			break;
+		}
 		case OP_RETURN: {
 			value_t result = pop();
+			close_upvalues(frame->slots);
 			vm.frame_count--;
 			if (vm.frame_count == 0) {
 				pop();
@@ -419,6 +522,7 @@ static enum interpret_result run(void)
 enum interpret_result interpret(char *source)
 {
 	struct object_function *function;
+	struct object_closure *closure;
 
 	function = compile(source);
 	if (function == NULL)
@@ -427,8 +531,11 @@ enum interpret_result interpret(char *source)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wincompatible-pointer-types"
 	push(CONS_OBJECT(function));
+	closure = new_closure(function);
+	pop();
+	push(CONS_OBJECT(closure));
 #pragma clang diagnostic pop
-	call(function, 0);
+	call(closure, 0);
 
 	return run();
 }

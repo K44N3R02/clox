@@ -16,7 +16,7 @@ enum interpret_result {
 };
 
 struct call_frame {
-	struct object_function *function;
+	struct object_closure *closure;
 	uint8_t *ip;
 	value_t *slots;
 };
@@ -29,6 +29,7 @@ struct vm {
 	struct table strings;
 	struct table globals;
 	struct object *objects;
+	struct object_upvalue *open_upvalues;
 };
 
 extern struct vm vm;

@@ -61,6 +61,17 @@ static void free_object(struct object *object)
 	case OBJECT_NATIVE_FN:
 		FREE(struct object_native_fn, object);
 		break;
+	case OBJECT_UPVALUE:
+		FREE(struct object_upvalue, object);
+		break;
+	case OBJECT_CLOSURE: {
+		struct object_closure *closure =
+			(struct object_closure *)object;
+		FREE_ARRAY(struct object_upvalue, closure->upvalues,
+			   closure->upvalue_count);
+		FREE(struct object_closure, object);
+		break;
+	}
 	default:
 		break;
 	}

@@ -97,16 +97,33 @@ int32_t add_constant(struct chunk *chunk, value_t value)
 	return chunk->constants.length - 1;
 }
 
-void write_constant(struct chunk *chunk, value_t value, int32_t line)
+/**
+ * write_constant() - Write constant to a chunk with appropriate opcode.
+ * @chunk: Pointer to the chunk where the constant to be written.
+ * @opcode: Opcode which will be used to reference the constant.
+ * @value: Constant to be written.
+ * @line: Line number of the constant.
+ *
+ * This function attempts to write @value to @chunk's constant table. If there
+ * is already more than 256 constants in the table, @opcode will become its long
+ * form.
+ *
+ * NOTE: If there are 2^24 constants written in @chunk, the program exits with a
+ * status of 1.
+ *
+ * NOTE: @opcode must be OP_CONSTANT or OP_CLOSURE.
+ */
+void write_constant(struct chunk *chunk, uint8_t opcode, value_t value,
+		    int32_t line)
 {
 	int32_t constant;
 
 	constant = add_constant(chunk, value);
 	if (constant < (1 << 8)) {
-		write_chunk(chunk, OP_CONSTANT, line);
+		write_chunk(chunk, opcode, line);
 		write_chunk(chunk, constant, line);
 	} else if (constant < (1 << 24)) {
-		write_chunk(chunk, OP_CONSTANT_LONG, line);
+		write_chunk(chunk, opcode + 1, line);
 		// Big endian
 		write_chunk(chunk, (constant >> 16) & 0xFF, line);
 		write_chunk(chunk, (constant >> 8) & 0xFF, line);

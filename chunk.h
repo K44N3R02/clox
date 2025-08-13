@@ -34,6 +34,11 @@ enum op_code {
 	OP_JUMP,
 	OP_LOOP,
 	OP_CALL,
+	OP_CLOSURE,
+	OP_CLOSURE_LONG,
+	OP_GET_UPVALUE,
+	OP_SET_UPVALUE,
+	OP_CLOSE_UPVALUE,
 	OP_RETURN,
 };
 
@@ -64,7 +69,8 @@ struct chunk {
 void init_chunk(struct chunk *chunk);
 void write_chunk(struct chunk *chunk, uint8_t byte, int32_t line);
 int32_t add_constant(struct chunk *chunk, value_t value);
-void write_constant(struct chunk *chunk, value_t value, int32_t line);
+void write_constant(struct chunk *chunk, uint8_t opcode, value_t value,
+		    int32_t line);
 void free_chunk(struct chunk *chunk);
 
 #endif
