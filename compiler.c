@@ -889,9 +889,14 @@ static void function(enum function_type type)
 		} while (match(TOKEN_COMMA));
 		consume(TOKEN_RIGHT_PAREN, "Expected ')' after argument list.");
 	}
-	consume(TOKEN_LEFT_BRACE, "Expected '{' before function body.");
 
-	block();
+	if (match(TOKEN_EQUAL)) {
+		expression();
+		emit_byte(OP_RETURN);
+	} else {
+		consume(TOKEN_LEFT_BRACE, "Expected '{' before function body.");
+		block();
+	}
 
 	function = end_compiler();
 #pragma clang diagnostic push

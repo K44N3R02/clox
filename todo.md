@@ -90,7 +90,7 @@
 - [ ] Implement `switch` with O(1) complexity
 - [ ] Implement `goto`
 - [ ] String escape sequences
-- [ ] Support expression functions `fun a(x) = x + 1 // fun a(x) { return x + 1; }`
+- [x] Support expression functions `fun a(x) = x + 1 // fun a(x) { return x + 1; }`
 - [ ] Add lambda functions `(fun (x) { print x; })(2); (fun (x) = x * 2)(3);`
 - [ ] Add documentation for each function
 
