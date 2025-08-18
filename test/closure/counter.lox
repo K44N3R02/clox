@@ -1,0 +1,15 @@
+fun counter(i) {
+    var count = i;
+    fun inner() {
+        i = i - 1;
+        return i;
+    }
+    return inner;
+}
+
+var count10 = counter(10);
+var x;
+while ((x = count10()) > 0) {
+    print x;
+}
+

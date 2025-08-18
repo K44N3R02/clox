@@ -1,6 +1,9 @@
 bin/
+test-result/
 *.o
 clox
+clox-dbg
+clox-release
 out.txt
 test.in
 test.out
