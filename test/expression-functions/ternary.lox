@@ -1,0 +1,6 @@
+fun measure(x) =
+    x < 10 ? "small" : x < 20 ? "big" : "very big"
+
+print measure(100);
+print measure(16);
+print measure(7);

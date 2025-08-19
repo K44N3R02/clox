@@ -1,0 +1,8 @@
+fun add(x) {
+    fun inner(y) = x + y
+    return inner;
+}
+
+var add4 = add(4);
+var eleven = add4(7);
+print eleven;
