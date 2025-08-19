@@ -1,3 +1,4 @@
+#include <_stdio.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -146,6 +147,7 @@ struct upvalue {
 enum function_type {
 	TYPE_FUNCTION,
 	TYPE_SCRIPT,
+	TYPE_LAMBDA,
 };
 
 struct compiler {
@@ -159,6 +161,7 @@ struct compiler {
 };
 
 struct compiler *current = NULL;
+uint32_t lambda_count = 0;
 
 static void init_compiler(struct compiler *compiler, enum function_type type)
 {
@@ -171,9 +174,15 @@ static void init_compiler(struct compiler *compiler, enum function_type type)
 	compiler->scope_depth = 0;
 	compiler->function = new_function();
 	current = compiler;
-	if (type != TYPE_SCRIPT)
+	if (type == TYPE_LAMBDA) {
+		char *name_buf;
+		const int32_t len =
+			asprintf(&name_buf, "lambda %d", ++lambda_count);
+		current->function->name = take_string(name_buf, len);
+	} else if (type != TYPE_SCRIPT) {
 		current->function->name = copy_string(parser.previous.start,
 						      parser.previous.length);
+	}
 
 	local = &current->locals[current->local_count++];
 	local->depth = 0;
@@ -908,6 +917,11 @@ static void function(enum function_type type)
 			   compiler.upvalues[i].index);
 }
 
+static void lambda(bool can_assign)
+{
+	function(TYPE_LAMBDA);
+}
+
 static void function_declaration(void)
 {
 	uint8_t global = parse_variable("Expected function name.");
@@ -960,7 +974,7 @@ struct parse_rule rules[] = {
 	[TOKEN_ELSE]		= { NULL,	NULL,		PREC_NONE },
 	[TOKEN_FALSE]		= { literal,	NULL,		PREC_NONE },
 	[TOKEN_FOR]		= { NULL,	NULL,		PREC_NONE },
-	[TOKEN_FUN]		= { NULL,	NULL,		PREC_NONE },
+	[TOKEN_FUN]		= { lambda,	NULL,		PREC_NONE },
 	[TOKEN_IF]		= { NULL,	NULL,		PREC_NONE },
 	[TOKEN_NIL]		= { literal,	NULL,		PREC_NONE },
 	[TOKEN_OR]		= { NULL,	or_,		PREC_OR },
