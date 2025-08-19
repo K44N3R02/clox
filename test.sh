@@ -25,6 +25,9 @@ for category_dir in "$TEST_ROOT_DIR"/*; do
         category_tests_run=0
         category_tests_passed=0
 
+        # Array to store results of individual tests within the category
+        declare -a category_results=() # 👈 This is the key fix: reset the array
+
         # Loop through each test file in the category directory
         for test_file in "$category_dir"/*.lox; do
             if [ -f "$test_file" ]; then
@@ -34,41 +37,48 @@ for category_dir in "$TEST_ROOT_DIR"/*; do
                 expected_file="${test_file%.lox}.exp"
                 if [ -f "$expected_file" ]; then
 
-                    # Run the interpreter and capture its output
                     # Store the actual output in a temporary file for diffing
                     actual_output_file="$RESULT_DIR/${test_base_name}.out"
                     "$INTERPRETER" "$test_file" > "$actual_output_file" 2>&1
 
-                    # Read the expected output
-                    expected_output=$(cat "$expected_file")
-
                     # Compare the output
                     if diff -q "$actual_output_file" "$expected_file" > /dev/null; then
-                        echo "  ✅ PASS: $test_base_name"
+                        category_results+=("✅ PASS: $test_base_name")
                         ((category_tests_passed++))
-                        # Clean up actual output file if test passed
                         rm "$actual_output_file"
                     else
-                        echo "  ❌ FAIL: $test_base_name"
-                        echo "    - Category: $category_name"
+                        # Detailed failure message
+                        fail_message="❌ FAIL: $test_base_name"
+                        fail_message+="\n - Category: $category_name"
+
+                        diff_file="$RESULT_DIR/${test_base_name}.diff"
+                        trace_file="$RESULT_DIR/${test_base_name}.trace"
 
                         # Generate and save the diff
-                        diff_file="$RESULT_DIR/${test_base_name}.diff"
                         diff -u "$expected_file" "$actual_output_file" > "$diff_file"
+                        fail_message+="\n - Diff saved to '$diff_file'."
 
                         # Run the debug interpreter and save the trace
-                        trace_file="$RESULT_DIR/${test_base_name}.trace"
-                        echo "    - Diff saved to '$diff_file'."
-                        echo "    - Debug trace saved to '$trace_file'."
-
                         "$DEBUG_INTERPRETER" "$test_file" > "$trace_file" 2>&1
+                        fail_message+="\n - Debug trace saved to '$trace_file'."
+
+                        category_results+=("$fail_message")
                     fi
                     ((category_tests_run++))
                 else
-                    echo "  ⚠️  SKIP: $test_base_name - Missing expected output file."
+                    category_results+=("⚠️ SKIP: $test_base_name - Missing expected output file.")
                 fi
             fi
         done
+
+        # Check if all tests in the category passed and print the appropriate message
+        if [ "$category_tests_run" -gt 0 ] && [ "$category_tests_run" -eq "$category_tests_passed" ]; then
+            echo "  ✅ All tests in this category passed."
+        else
+            for result in "${category_results[@]}"; do
+                echo -e "  $result"
+            done
+        fi
 
         # Print category summary
         echo "----------------------------------------"
