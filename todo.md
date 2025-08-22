@@ -92,6 +92,6 @@
 - [ ] String escape sequences
 - [x] Support expression functions `fun a(x) = x + 1 // fun a(x) { return x + 1; }`
 - [x] Add lambda functions `(fun (x) { print x; })(2); (fun (x) = x * 2)(3);`
-- [ ] Add multiple parameter lists like Scala `fun add(x)(y) = x + y // fun add(x) = fun (y) = x + y`
+- [x] Add multiple parameter lists like Scala `fun add(x)(y) = x + y // fun add(x) = fun (y) = x + y`
 - [ ] Add documentation for each function
 
