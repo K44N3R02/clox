@@ -876,6 +876,8 @@ static void variable_declaration(void)
 	define_variable(global);
 }
 
+static void lambda(bool can_assign);
+
 static void function(enum function_type type)
 {
 	struct compiler compiler;
@@ -896,11 +898,15 @@ static void function(enum function_type type)
 			constant = parse_variable("Expected parameter name.");
 			define_variable(constant);
 		} while (match(TOKEN_COMMA));
-		consume(TOKEN_RIGHT_PAREN, "Expected ')' after argument list.");
+		consume(TOKEN_RIGHT_PAREN,
+			"Expected ')' after parameter list.");
 	}
 
 	if (match(TOKEN_EQUAL)) {
 		expression();
+		emit_byte(OP_RETURN);
+	} else if (check(TOKEN_LEFT_PAREN)) {
+		lambda(false);
 		emit_byte(OP_RETURN);
 	} else {
 		consume(TOKEN_LEFT_BRACE, "Expected '{' before function body.");
