@@ -1,0 +1,6 @@
+var greeter = fun (name) {
+    var greeting = "Hello " + name + "!";
+    print greeting;
+};
+greeter("World");
+greeter("John");

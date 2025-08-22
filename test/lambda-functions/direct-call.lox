@@ -1,0 +1,3 @@
+var x = (fun (a) { return a * a; })(3);
+print x;
+print (fun (x, y) = x + y)(2, x);

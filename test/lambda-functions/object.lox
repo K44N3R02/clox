@@ -1,0 +1,18 @@
+fun makeMultiplier(a, b) {
+    return fun (methodName) {
+        if (methodName == "addA")
+            return fun (value) { a = a + value; };
+        else if (methodName == "addB")
+            return fun (value) { b = b + value; };
+        else if (methodName == "result")
+            return fun () = a * b;
+        else
+            print "ERROR";
+    };
+}
+
+var mul = makeMultiplier(3, 2);
+mul("addA")(1);
+mul("addB")(3);
+print mul("result")();
+

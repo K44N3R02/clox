@@ -1,0 +1,9 @@
+fun map(fn, value) {
+    return fn(value);
+}
+
+var x = 3;
+var y = 5;
+print map(fun (i) { return i * 2; }, x);
+print map(fun (i) = i * x, y);
+
