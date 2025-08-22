@@ -1,0 +1,7 @@
+fun add(x)(y) = x + y
+
+var add4 = add(4);
+var eleven = add4(7);
+var five = add4(1);
+print eleven;
+print five;

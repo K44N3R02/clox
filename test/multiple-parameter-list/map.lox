@@ -1,0 +1,12 @@
+fun log_map(fn)(value) {
+    print fn(value);
+}
+
+var x = 3;
+var y = 5;
+var double = fun (i) = i * 2;
+var double_logger = log_map(double);
+
+double_logger(x);
+double_logger(y);
+

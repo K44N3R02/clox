@@ -1,0 +1,11 @@
+fun counter(i)() {
+    i = i - 1;
+    return i;
+}
+
+var count10 = counter(10);
+var x;
+while ((x = count10()) > 0) {
+    print x;
+}
+
